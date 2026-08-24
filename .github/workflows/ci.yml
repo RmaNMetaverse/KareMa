@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  server:
+    name: Server — typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+        working-directory: server
+      - run: npx prisma generate
+        working-directory: server
+      - run: npx tsc --noEmit
+        working-directory: server
+
+  web:
+    name: Web — typecheck and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npx tsc --noEmit
+        working-directory: web
+      - run: npx vite build
+        working-directory: web
+
+  stack:
+    name: Docker stack — boot and smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start the stack
+        run: |
+          cp .env.example .env
+          docker compose up -d --build
+
+      - name: Wait for the API
+        run: |
+          for i in $(seq 1 40); do
+            if curl -fsS http://localhost:8080/api/health; then echo; echo "up"; exit 0; fi
+            sleep 5
+          done
+          echo "the API never became healthy"
+          docker compose logs
+          exit 1
+
+      - name: Sign in and create a board
+        run: |
+          TOKEN=$(curl -fsS -X POST http://localhost:8080/api/auth/login \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"admin@karema.local","password":"admin1234"}' \
+            | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).token))")
+          test -n "$TOKEN"
+          curl -fsS -X POST http://localhost:8080/api/boards \
+            -H 'Content-Type: application/json' \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"title":"CI board"}' > /dev/null
+          echo "board created"
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs

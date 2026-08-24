@@ -1,0 +1,43 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# build output
+dist/
+build/
+server/dist/
+web/dist/
+
+# local configuration and secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# runtime data
+data/
+uploads/
+backups/
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# editors
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# prisma generated client
+server/node_modules/.prisma/

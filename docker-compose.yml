@@ -1,0 +1,59 @@
+name: karema
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: karema-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-karema}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-karema_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-karema}
+    volumes:
+      - karema_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-karema} -d ${POSTGRES_DB:-karema}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: ./server
+    container_name: karema-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-karema}:${POSTGRES_PASSWORD:-karema_dev_password}@db:5432/${POSTGRES_DB:-karema}?schema=public
+      JWT_SECRET: ${JWT_SECRET:-please-change-me-in-production}
+      UPLOAD_DIR: /data/uploads
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-100}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@karema.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin1234}
+      ADMIN_NAME: ${ADMIN_NAME:-Administrator}
+      NODE_ENV: production
+      PORT: 4000
+    volumes:
+      - karema_files:/data/uploads
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  web:
+    build:
+      context: ./web
+    container_name: karema-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "${KAREMA_PORT:-8080}:80"
+
+volumes:
+  karema_db:
+  karema_files:

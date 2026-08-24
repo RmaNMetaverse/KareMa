@@ -1,0 +1,428 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==========================================================================
+   Theme tokens. Colours are HSL triplets so Tailwind can apply opacity.
+   Modes: light | dark | warm (eye comfort) | midnight (OLED black)
+   ========================================================================== */
+
+:root {
+  --primary: 243 75% 62%;
+  --primary-ink: 0 0% 100%;
+  --secondary: 280 70% 62%;
+  --secondary-ink: 0 0% 100%;
+  --danger: 0 72% 55%;
+  --success: 152 60% 42%;
+  --warning: 38 92% 52%;
+
+  --radius: 14px;
+  --density: 1;
+  --font-scale: 1;
+
+  /* liquid glass */
+  --glass-blur: 18px;
+  --glass-sat: 165%;
+  --glass-alpha: 0.62;
+  --glass-border: 0.55;
+  --glass-sheen: 0.35;
+}
+
+html[data-theme='light'] {
+  --bg: 225 32% 96%;
+  --surface: 0 0% 100%;
+  --surface-2: 228 34% 97%;
+  --surface-3: 228 24% 92%;
+  --border: 226 22% 87%;
+  --text: 230 38% 12%;
+  --muted: 228 12% 44%;
+  --shadow: 230 40% 30%;
+  --glass-alpha: 0.68;
+  color-scheme: light;
+}
+
+html[data-theme='dark'] {
+  --bg: 228 32% 6%;
+  --surface: 227 26% 11%;
+  --surface-2: 227 24% 15%;
+  --surface-3: 226 22% 20%;
+  --border: 226 18% 25%;
+  --text: 228 32% 94%;
+  --muted: 226 13% 63%;
+  --shadow: 228 60% 2%;
+  --glass-alpha: 0.55;
+  color-scheme: dark;
+}
+
+/* Eye-protection: warm, low-blue, reduced contrast */
+html[data-theme='warm'] {
+  --bg: 36 46% 90%;
+  --surface: 38 58% 96%;
+  --surface-2: 36 44% 92%;
+  --surface-3: 34 36% 86%;
+  --border: 32 28% 78%;
+  --text: 26 32% 17%;
+  --muted: 28 16% 40%;
+  --shadow: 28 40% 30%;
+  --glass-alpha: 0.7;
+  color-scheme: light;
+}
+
+html[data-theme='midnight'] {
+  --bg: 0 0% 0%;
+  --surface: 228 20% 6%;
+  --surface-2: 228 18% 10%;
+  --surface-3: 228 16% 15%;
+  --border: 228 14% 19%;
+  --text: 220 20% 92%;
+  --muted: 224 10% 58%;
+  --shadow: 0 0% 0%;
+  --glass-alpha: 0.5;
+  color-scheme: dark;
+}
+
+/* Warm mode also softens whites everywhere via a subtle screen overlay */
+html[data-theme='warm'] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, hsl(32 80% 60% / 0.07), hsl(20 70% 50% / 0.05));
+  mix-blend-mode: multiply;
+  z-index: 9999;
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+  html {
+    font-size: calc(16px * var(--font-scale));
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-bg text-ink font-sans antialiased;
+    margin: 0;
+    min-height: 100vh;
+    overscroll-behavior: none;
+  }
+  :focus-visible {
+    outline: 2px solid hsl(var(--primary));
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: hsl(var(--primary) / 0.28);
+  }
+  /* scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted) / 0.35) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted) / 0.3);
+    border-radius: 99px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted) / 0.5);
+    background-clip: content-box;
+  }
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+}
+
+/* ==========================================================================
+   Ambient background — a soft aurora built from the two brand colours
+   ========================================================================== */
+
+.app-aurora {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.app-aurora span {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: var(--aurora-strength, 0.5);
+}
+.app-aurora span:nth-child(1) {
+  width: 46vw;
+  height: 46vw;
+  left: -8vw;
+  top: -12vw;
+  background: hsl(var(--primary) / 0.45);
+  animation: float 11s ease-in-out infinite;
+}
+.app-aurora span:nth-child(2) {
+  width: 40vw;
+  height: 40vw;
+  right: -6vw;
+  top: 8vh;
+  background: hsl(var(--secondary) / 0.4);
+  animation: float 14s ease-in-out infinite reverse;
+}
+.app-aurora span:nth-child(3) {
+  width: 34vw;
+  height: 34vw;
+  left: 30vw;
+  bottom: -14vw;
+  background: hsl(var(--primary) / 0.25);
+  animation: float 17s ease-in-out infinite;
+}
+html[data-motion='off'] .app-aurora span {
+  animation: none !important;
+}
+
+/* ==========================================================================
+   Liquid glass
+   ========================================================================== */
+
+@layer components {
+  .surface {
+    @apply bg-surface border border-line;
+    box-shadow: 0 1px 2px hsl(var(--shadow) / 0.06), 0 4px 16px -6px hsl(var(--shadow) / 0.1);
+  }
+
+  /* Frosted panel. Falls back to a solid surface when glass is off. */
+  .glass {
+    position: relative;
+    background: hsl(var(--surface));
+    border: 1px solid hsl(var(--border));
+    box-shadow: 0 1px 2px hsl(var(--shadow) / 0.06), 0 4px 16px -6px hsl(var(--shadow) / 0.1);
+  }
+
+  html[data-glass='on'] .glass {
+    background: hsl(var(--surface) / var(--glass-alpha));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+    border: 1px solid hsl(var(--border) / var(--glass-border));
+    box-shadow: 0 1px 1px hsl(0 0% 100% / calc(var(--glass-sheen) * 0.4)) inset,
+      0 -1px 1px hsl(var(--shadow) / 0.12) inset, 0 8px 32px -12px hsl(var(--shadow) / 0.35);
+  }
+
+  /* Specular highlight along the top edge — the "liquid" part */
+  html[data-glass='on'] .glass-sheen::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(
+      160deg,
+      hsl(0 0% 100% / var(--glass-sheen)) 0%,
+      hsl(0 0% 100% / 0) 38%,
+      hsl(0 0% 100% / 0) 62%,
+      hsl(var(--primary) / calc(var(--glass-sheen) * 0.25)) 100%
+    );
+    opacity: 0.75;
+  }
+
+  html[data-glass='on'] .glass-strong {
+    --glass-alpha: 0.42;
+    --glass-blur: 30px;
+  }
+
+  .glass-hover {
+    transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease,
+      background-color 0.18s ease;
+  }
+  .glass-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 2px 4px hsl(var(--shadow) / 0.08), 0 16px 40px -12px hsl(var(--shadow) / 0.3);
+  }
+  html[data-motion='off'] .glass-hover:hover {
+    transform: none;
+  }
+
+  /* ---- buttons ---- */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md font-medium select-none;
+    padding: calc(0.5rem * var(--density)) calc(0.9rem * var(--density));
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    transition: transform 0.12s ease, background-color 0.15s ease, box-shadow 0.15s ease,
+      opacity 0.15s ease;
+    white-space: nowrap;
+  }
+  .btn:active {
+    transform: scale(0.97);
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--secondary)));
+    color: hsl(var(--primary-ink));
+    box-shadow: 0 2px 8px -2px hsl(var(--primary) / 0.5);
+  }
+  .btn-primary:hover {
+    box-shadow: 0 6px 20px -4px hsl(var(--primary) / 0.6);
+  }
+  .btn-solid {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-ink));
+  }
+  .btn-ghost {
+    @apply text-muted;
+    background: transparent;
+  }
+  .btn-ghost:hover {
+    background: hsl(var(--surface-3) / 0.75);
+    @apply text-ink;
+  }
+  .btn-subtle {
+    background: hsl(var(--surface-3) / 0.6);
+    @apply text-ink;
+  }
+  .btn-subtle:hover {
+    background: hsl(var(--surface-3));
+  }
+  .btn-danger {
+    background: hsl(var(--danger) / 0.14);
+    color: hsl(var(--danger));
+  }
+  .btn-danger:hover {
+    background: hsl(var(--danger));
+    color: white;
+  }
+  .btn-icon {
+    @apply rounded-md;
+    padding: calc(0.45rem * var(--density));
+  }
+
+  /* ---- inputs ---- */
+  .input {
+    @apply w-full rounded-md bg-surface2 border border-line text-ink placeholder:text-muted;
+    padding: calc(0.55rem * var(--density)) calc(0.75rem * var(--density));
+    font-size: 0.9rem;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  }
+  .input:focus {
+    outline: none;
+    border-color: hsl(var(--primary) / 0.65);
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.18);
+  }
+  .input-lg {
+    padding: 0.75rem 0.95rem;
+    font-size: 0.95rem;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-sm text-xs font-medium;
+    padding: 0.22rem 0.5rem;
+  }
+
+  .card-tile {
+    @apply rounded-lg;
+    transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.16s ease;
+  }
+
+  .divider {
+    @apply h-px w-full;
+    background: hsl(var(--border) / 0.8);
+  }
+
+  .skeleton {
+    @apply relative overflow-hidden rounded-md;
+    background: hsl(var(--surface-3) / 0.6);
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, hsl(var(--surface) / 0.5), transparent);
+    animation: shimmer 1.6s infinite;
+  }
+
+  .scroll-x {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+}
+
+/* Drag & drop */
+.dragging-card {
+  opacity: 0.35;
+}
+.drag-overlay {
+  cursor: grabbing !important;
+  transform: rotate(2.5deg) scale(1.03);
+  box-shadow: 0 24px 60px -12px hsl(var(--shadow) / 0.5);
+}
+
+/* Motion preferences */
+html[data-motion='off'] *,
+html[data-motion='off'] *::before,
+html[data-motion='off'] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Comment / description markdown-lite rendering */
+.prose-mini p {
+  margin: 0 0 0.5em;
+}
+.prose-mini p:last-child {
+  margin-bottom: 0;
+}
+.prose-mini code {
+  @apply font-mono text-[0.85em] rounded-xs px-1 py-0.5;
+  background: hsl(var(--surface-3) / 0.8);
+}
+.prose-mini pre {
+  @apply font-mono text-[0.85em] rounded-sm p-3 my-2 overflow-x-auto;
+  background: hsl(var(--surface-3) / 0.7);
+}
+.prose-mini a {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.prose-mini ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+  margin: 0.35em 0;
+}
+.prose-mini ol {
+  list-style: decimal;
+  padding-left: 1.25rem;
+  margin: 0.35em 0;
+}
+.prose-mini blockquote {
+  border-left: 3px solid hsl(var(--primary) / 0.5);
+  padding-left: 0.75rem;
+  margin: 0.5em 0;
+  color: hsl(var(--muted));
+}
+.mention {
+  @apply rounded-xs font-medium px-1;
+  background: hsl(var(--primary) / 0.16);
+  color: hsl(var(--primary));
+}
