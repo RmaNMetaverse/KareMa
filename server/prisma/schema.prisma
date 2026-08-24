@@ -34,7 +34,9 @@ model User {
   email        String     @unique
   name         String
   passwordHash String
-  role         GlobalRole @default(MEMBER)
+  role         GlobalRole @default(MEMBER) // legacy tier, kept in sync with roleRef
+  roleId       String?
+  roleRef      Role?      @relation(fields: [roleId], references: [id], onDelete: SetNull)
   isActive     Boolean    @default(true)
   avatarColor  String     @default("#6366f1")
   avatarUrl    String?
@@ -128,6 +130,9 @@ model Card {
   isComplete  Boolean   @default(false)
   isArchived  Boolean   @default(false)
   number      Int       @default(0)
+  parentId    String?
+  parent      Card?     @relation("CardHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Card[]    @relation("CardHierarchy")
   createdById String
   createdBy   User      @relation("CardCreator", fields: [createdById], references: [id])
   board       Board     @relation(fields: [boardId], references: [id], onDelete: Cascade)
@@ -146,6 +151,7 @@ model Card {
 
   @@index([listId])
   @@index([boardId])
+  @@index([parentId])
 }
 
 model CardAssignee {
@@ -278,6 +284,23 @@ model Notification {
   comment Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead])
+}
+
+/// A named bundle of instance-wide permissions. The three system roles cannot
+/// be deleted; administrators may add as many custom ones as they like.
+model Role {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String
+  description String?
+  color       String   @default("#6366f1")
+  isSystem    Boolean  @default(false)
+  rank        Int      @default(100)
+  permissions Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users User[]
 }
 
 model Setting {

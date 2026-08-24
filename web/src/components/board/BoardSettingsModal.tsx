@@ -150,7 +150,7 @@ export function BoardSettingsModal({
             </div>
 
             <div className="flex justify-between pt-1">
-              {(board.myRole === 'OWNER' || user?.role === 'ADMIN') && (
+              {(board.myRole === 'OWNER' || user?.permissions?.['boards.deleteAny']) && (
                 <button className="btn btn-danger" onClick={() => setConfirmDelete(true)}>
                   <Trash2 size={15} /> Delete board
                 </button>

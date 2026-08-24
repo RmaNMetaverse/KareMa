@@ -15,7 +15,8 @@ import { del, patch, post, uploadFile } from '../../lib/api';
 import { useApp } from '../../store/app';
 import { cn, formatBytes, renderRichText, timeAgo } from '../../lib/utils';
 import { Avatar, Spinner } from '../ui';
-import { MentionInput, MentionUser } from './MentionInput';
+import { MentionUser } from './MentionInput';
+import { RichTextEditor } from './RichTextEditor';
 
 export type CommentData = {
   id: string;
@@ -235,11 +236,12 @@ export function CommentComposer({
           if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
         }}
       >
-        <MentionInput
+        <RichTextEditor
           value={body}
           onChange={setBody}
           people={people}
-          rows={2}
+          rows={3}
+          compact
           placeholder="Write a comment. Type @ to mention someone, or drop files here."
           onSubmit={submit}
         />
@@ -356,7 +358,7 @@ export function CommentItem({
 
         {editing ? (
           <div className="mt-1.5">
-            <MentionInput value={draft} onChange={setDraft} people={people} rows={3} autoFocus />
+            <RichTextEditor value={draft} onChange={setDraft} people={people} rows={3} compact autoFocus />
             <div className="mt-1.5 flex gap-1.5">
               <button
                 className="btn btn-primary py-1 text-xs"

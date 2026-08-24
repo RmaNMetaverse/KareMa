@@ -14,7 +14,7 @@ cardsRouter.use(requireAuth);
 async function cardAccess(req: any, cardId: string) {
   const card = await prisma.card.findUnique({ where: { id: cardId } });
   if (!card) return { card: null, access: null };
-  const access = await getBoardAccess(req.user.id, card.boardId, req.user.role);
+  const access = await getBoardAccess(req.user, card.boardId);
   return { card, access };
 }
 
@@ -43,6 +43,7 @@ cardsRouter.post('/', async (req, res) => {
       title: z.string().min(1).max(500),
       index: z.number().int().min(0).optional(),
       description: z.string().max(20000).optional(),
+      parentId: z.string().nullable().optional(),
     })
     .safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'A card title is required' });
@@ -50,7 +51,7 @@ cardsRouter.post('/', async (req, res) => {
   const list = await prisma.list.findUnique({ where: { id: parsed.data.listId } });
   if (!list) return res.status(404).json({ error: 'List not found' });
 
-  const access = await getBoardAccess(req.user!.id, list.boardId, req.user!.role);
+  const access = await getBoardAccess(req.user!, list.boardId);
   if (!access?.canEdit) return res.status(403).json({ error: 'You cannot edit this board' });
 
   const count = await prisma.card.count({ where: { listId: list.id, isArchived: false } });
@@ -65,6 +66,7 @@ cardsRouter.post('/', async (req, res) => {
       description: parsed.data.description,
       position,
       number: boardCards + 1,
+      parentId: parsed.data.parentId ?? null,
       createdById: req.user!.id,
       watchers: { create: { userId: req.user!.id } },
     },
@@ -351,6 +353,13 @@ cardsRouter.post('/:id/checklists', async (req, res) => {
   await prisma.checklist.create({
     data: { cardId: card.id, title: title.data, position: (count + 1) * 1024 },
   });
+  await logActivity(
+    card.boardId,
+    req.user!.id,
+    'checklist.created',
+    { checklist: title.data, title: card.title },
+    card.id
+  );
 
   const updated = await fullCard(card.id);
   emitBoard(card.boardId, 'card:updated', updated);
@@ -380,6 +389,13 @@ cardsRouter.post('/:id/checklists/:checklistId/items', async (req, res) => {
   await prisma.checklistItem.create({
     data: { checklistId: req.params.checklistId, text: text.data, position: (count + 1) * 1024 },
   });
+  await logActivity(
+    card.boardId,
+    req.user!.id,
+    'checklist.item.added',
+    { item: text.data, title: card.title },
+    card.id
+  );
 
   const updated = await fullCard(card.id);
   emitBoard(card.boardId, 'card:updated', updated);
@@ -396,7 +412,57 @@ cardsRouter.patch('/:id/checklist-items/:itemId', async (req, res) => {
     .safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid item' });
 
+  const before = await prisma.checklistItem.findUnique({
+    where: { id: req.params.itemId },
+    include: { checklist: { select: { title: true } } },
+  });
+  if (!before) return res.status(404).json({ error: 'Checklist item not found' });
+
   await prisma.checklistItem.update({ where: { id: req.params.itemId }, data: parsed.data });
+
+  // ticking an item is a real event — record who did it and when
+  if (parsed.data.isDone !== undefined && parsed.data.isDone !== before.isDone) {
+    const items = await prisma.checklistItem.findMany({
+      where: { checklistId: before.checklistId },
+      select: { isDone: true },
+    });
+    const done = items.filter((i) => i.isDone).length;
+
+    await logActivity(
+      card.boardId,
+      req.user!.id,
+      parsed.data.isDone ? 'checklist.checked' : 'checklist.unchecked',
+      {
+        item: before.text,
+        checklist: before.checklist.title,
+        title: card.title,
+        done,
+        total: items.length,
+      },
+      card.id
+    );
+
+    // a finished checklist is worth telling the card's watchers about
+    if (parsed.data.isDone && done === items.length && items.length > 0) {
+      await notify({
+        userIds: await cardAudience(card.id),
+        actorId: req.user!.id,
+        type: 'checklist.completed',
+        message: `${req.user!.name} finished "${before.checklist.title}" on "${card.title}"`,
+        boardId: card.boardId,
+        cardId: card.id,
+      });
+    }
+  } else if (parsed.data.text !== undefined) {
+    await logActivity(
+      card.boardId,
+      req.user!.id,
+      'checklist.item.edited',
+      { item: parsed.data.text, was: before.text, title: card.title },
+      card.id
+    );
+  }
+
   const updated = await fullCard(card.id);
   emitBoard(card.boardId, 'card:updated', updated);
   res.json({ card: updated });
@@ -429,4 +495,141 @@ cardsRouter.post('/:id/watch', async (req, res) => {
   }
   await prisma.cardWatcher.create({ data: { cardId: card.id, userId: req.user!.id } });
   res.json({ isWatching: true });
+});
+
+/* -------------------------------------------------------------- hierarchy */
+
+/** Walk up the parent chain to make sure a move would not create a loop. */
+async function wouldCycle(cardId: string, candidateParentId: string) {
+  let cursor: string | null = candidateParentId;
+  const seen = new Set<string>();
+  while (cursor) {
+    if (cursor === cardId) return true;
+    if (seen.has(cursor)) return true;
+    seen.add(cursor);
+    const parent: { parentId: string | null } | null = await prisma.card.findUnique({
+      where: { id: cursor },
+      select: { parentId: true },
+    });
+    cursor = parent?.parentId ?? null;
+  }
+  return false;
+}
+
+/** Attach a card to a parent, or pass null to make it top-level again. */
+cardsRouter.patch('/:id/parent', async (req, res) => {
+  const { card, access } = await cardAccess(req, req.params.id);
+  if (!card) return res.status(404).json({ error: 'Card not found' });
+  if (!access?.canEdit) return res.status(403).json({ error: 'You cannot edit this board' });
+
+  const parsed = z.object({ parentId: z.string().nullable() }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid parent' });
+
+  const parentId = parsed.data.parentId;
+
+  if (parentId) {
+    if (parentId === card.id)
+      return res.status(400).json({ error: 'A card cannot be its own parent' });
+
+    const parent = await prisma.card.findUnique({ where: { id: parentId } });
+    if (!parent) return res.status(404).json({ error: 'That parent card no longer exists' });
+    if (parent.boardId !== card.boardId)
+      return res.status(400).json({ error: 'A parent has to be on the same board' });
+    if (await wouldCycle(card.id, parentId))
+      return res.status(400).json({ error: 'That would put the card inside one of its own subtasks' });
+  }
+
+  await prisma.card.update({ where: { id: card.id }, data: { parentId } });
+
+  const parentTitle = parentId
+    ? (await prisma.card.findUnique({ where: { id: parentId }, select: { title: true } }))?.title
+    : null;
+  await logActivity(
+    card.boardId,
+    req.user!.id,
+    parentId ? 'card.parent.set' : 'card.parent.cleared',
+    { title: card.title, parent: parentTitle },
+    card.id
+  );
+
+  const updated = await fullCard(card.id);
+  emitBoard(card.boardId, 'card:updated', updated);
+  if (parentId) {
+    const parentCard = await fullCard(parentId);
+    emitBoard(card.boardId, 'card:updated', parentCard);
+  }
+  res.json({ card: updated });
+});
+
+/** Create a subtask under this card, in the same list by default. */
+cardsRouter.post('/:id/subtasks', async (req, res) => {
+  const { card, access } = await cardAccess(req, req.params.id);
+  if (!card) return res.status(404).json({ error: 'Card not found' });
+  if (!access?.canEdit) return res.status(403).json({ error: 'You cannot edit this board' });
+
+  const parsed = z
+    .object({ title: z.string().min(1).max(500), listId: z.string().optional() })
+    .safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'A subtask title is required' });
+
+  const listId = parsed.data.listId ?? card.listId;
+  const list = await prisma.list.findUnique({ where: { id: listId } });
+  if (!list || list.boardId !== card.boardId)
+    return res.status(400).json({ error: 'That list is not on this board' });
+
+  const siblings = await prisma.card.count({ where: { listId, isArchived: false } });
+  const boardCards = await prisma.card.count({ where: { boardId: card.boardId } });
+
+  const created = await prisma.card.create({
+    data: {
+      boardId: card.boardId,
+      listId,
+      title: parsed.data.title.trim(),
+      position: await cardPosition(listId, siblings),
+      number: boardCards + 1,
+      parentId: card.id,
+      createdById: req.user!.id,
+      watchers: { create: { userId: req.user!.id } },
+    },
+  });
+
+  await logActivity(
+    card.boardId,
+    req.user!.id,
+    'card.subtask.added',
+    { title: created.title, parent: card.title },
+    created.id
+  );
+
+  const [subtask, parent] = await Promise.all([fullCard(created.id), fullCard(card.id)]);
+  emitBoard(card.boardId, 'card:created', subtask);
+  emitBoard(card.boardId, 'card:updated', parent);
+  res.status(201).json({ card: subtask, parent });
+});
+
+/** Candidate parents: every other top-level-ish card on the same board. */
+cardsRouter.get('/:id/parent-options', async (req, res) => {
+  const { card, access } = await cardAccess(req, req.params.id);
+  if (!card) return res.status(404).json({ error: 'Card not found' });
+  if (!access) return res.status(403).json({ error: 'No access to this card' });
+
+  const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+  const candidates = await prisma.card.findMany({
+    where: {
+      boardId: card.boardId,
+      isArchived: false,
+      id: { not: card.id },
+      ...(q ? { title: { contains: q, mode: 'insensitive' as const } } : {}),
+    },
+    orderBy: { number: 'asc' },
+    take: 60,
+    select: { id: true, title: true, number: true, parentId: true, listId: true },
+  });
+
+  // drop anything that lives underneath this card
+  const allowed = [];
+  for (const c of candidates) {
+    if (!(await wouldCycle(card.id, c.id))) allowed.push(c);
+  }
+  res.json({ cards: allowed });
 });

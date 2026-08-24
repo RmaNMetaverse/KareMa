@@ -4,7 +4,8 @@ import {
   AlignLeft,
   CheckSquare,
   Clock,
-  Eye,
+  CornerDownRight,
+  GitBranch,
   MessageSquare,
   Paperclip,
 } from 'lucide-react';
@@ -27,7 +28,10 @@ export type CardData = {
   labels: { label: { id: string; name: string; color: string } }[];
   checklists: { items: { isDone: boolean }[] }[];
   attachments: { id: string }[];
-  _count?: { comments: number; attachments: number };
+  parentId?: string | null;
+  parent?: { id: string; number: number; title: string } | null;
+  children?: { id: string; isComplete: boolean }[];
+  _count?: { comments: number; attachments: number; children?: number };
 };
 
 const DUE_STYLES: Record<string, string> = {
@@ -68,6 +72,8 @@ export function CardTile({
 
   const items = card.checklists.flatMap((c) => c.items);
   const done = items.filter((i) => i.isDone).length;
+  const subtasks = card.children ?? [];
+  const subtasksDone = subtasks.filter((c) => c.isComplete).length;
   const comments = card._count?.comments ?? 0;
   const attachments = card._count?.attachments ?? card.attachments?.length ?? 0;
   const due = dueState(card.dueDate, card.isComplete);
@@ -163,6 +169,8 @@ export function CardTile({
             comments > 0 ||
             attachments > 0 ||
             items.length > 0 ||
+            subtasks.length > 0 ||
+            card.parentId ||
             card.description ||
             priority?.value !== 'NONE') && (
             <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
@@ -183,6 +191,23 @@ export function CardTile({
                 </span>
               )}
               {card.description && <AlignLeft size={13} className="opacity-70" />}
+              {card.parentId && (
+                <span
+                  className="flex items-center gap-1 opacity-70"
+                  title={card.parent ? `Subtask of #${card.parent.number} ${card.parent.title}` : 'Subtask'}
+                >
+                  <CornerDownRight size={12} />
+                </span>
+              )}
+              {subtasks.length > 0 && (
+                <span
+                  className={cn('chip', subtasksDone === subtasks.length && 'bg-success/16 text-success')}
+                  title="Subtasks"
+                >
+                  <GitBranch size={11} />
+                  {subtasksDone}/{subtasks.length}
+                </span>
+              )}
               {items.length > 0 && (
                 <span
                   className={cn('chip', done === items.length && 'bg-success/16 text-success')}

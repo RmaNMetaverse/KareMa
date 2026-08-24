@@ -105,10 +105,36 @@ export function renderRichText(input: string): string {
   let inList: 'ul' | 'ol' | null = null;
 
   for (const line of lines) {
+    const heading = /^(#{1,4})\s+(.*)$/.exec(line);
+    const task = /^\s*[-*]\s+\[([ xX])\]\s+(.*)$/.exec(line);
     const bullet = /^\s*[-*]\s+(.*)$/.exec(line);
     const numbered = /^\s*\d+\.\s+(.*)$/.exec(line);
     const quote = /^\s*&gt;\s?(.*)$/.exec(line);
 
+    if (heading) {
+      if (inList) {
+        out.push(`</${inList}>`);
+        inList = null;
+      }
+      // a single "#" already reads as a big heading inside a card, so start at h2
+      const level = Math.min(heading[1].length + 1, 5);
+      out.push(`<h${level}>${heading[2]}</h${level}>`);
+      continue;
+    }
+    if (task) {
+      if (inList !== 'ul') {
+        if (inList) out.push(`</${inList}>`);
+        out.push('<ul class="task-list">');
+        inList = 'ul';
+      }
+      const done = task[1].toLowerCase() === 'x';
+      out.push(
+        `<li class="task${done ? ' done' : ''}"><span class="box" aria-hidden="true">${
+          done ? '&#10003;' : ''
+        }</span>${task[2]}</li>`
+      );
+      continue;
+    }
     if (bullet) {
       if (inList !== 'ul') {
         if (inList) out.push(`</${inList}>`);

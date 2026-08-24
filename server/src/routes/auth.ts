@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { publicUser } from '../lib/selects';
 import { removeStoredFile, storedNameFromUrl, uploadImage } from '../lib/upload';
+import { permissionsOf } from '../lib/roles';
 import {
   clearAuthCookie,
   hashPassword,
@@ -11,6 +12,8 @@ import {
   signToken,
   verifyPassword,
 } from '../lib/auth';
+
+const roleSummary = { select: { id: true, key: true, name: true, color: true } };
 
 export const authRouter = Router();
 
@@ -32,6 +35,11 @@ authRouter.post('/login', async (req, res) => {
   setAuthCookie(res, token);
   await prisma.user.update({ where: { id: user.id }, data: { lastSeenAt: new Date() } });
 
+  const withRole = await prisma.user.findUnique({
+    where: { id: user.id },
+    include: { roleRef: true },
+  });
+
   res.json({
     token,
     user: {
@@ -39,6 +47,15 @@ authRouter.post('/login', async (req, res) => {
       name: user.name,
       email: user.email,
       role: user.role,
+      roleRef: withRole?.roleRef
+        ? {
+            id: withRole.roleRef.id,
+            key: withRole.roleRef.key,
+            name: withRole.roleRef.name,
+            color: withRole.roleRef.color,
+          }
+        : null,
+      permissions: permissionsOf(withRole!),
       avatarColor: user.avatarColor,
       avatarUrl: user.avatarUrl,
       title: user.title,
@@ -56,9 +73,28 @@ authRouter.post('/logout', (_req, res) => {
 authRouter.get('/me', requireAuth, async (req, res) => {
   const user = await prisma.user.findUnique({
     where: { id: req.user!.id },
-    select: { ...publicUser, prefs: true, mustChangePw: true },
+    include: { roleRef: true },
   });
-  res.json({ user });
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  res.json({
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      roleRef: user.roleRef
+        ? { id: user.roleRef.id, key: user.roleRef.key, name: user.roleRef.name, color: user.roleRef.color }
+        : null,
+      permissions: permissionsOf(user),
+      avatarColor: user.avatarColor,
+      avatarUrl: user.avatarUrl,
+      title: user.title,
+      isActive: user.isActive,
+      prefs: user.prefs,
+      mustChangePw: user.mustChangePw,
+    },
+  });
 });
 
 authRouter.patch('/me', requireAuth, async (req, res) => {

@@ -30,7 +30,7 @@ function Protected({ children }: { children: React.ReactNode }) {
 
 function AdminOnly({ children }: { children: React.ReactNode }) {
   const { user } = useApp();
-  if (user && user.role !== 'ADMIN') return <Navigate to="/" replace />;
+  if (user && !user.permissions?.['admin.access']) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 

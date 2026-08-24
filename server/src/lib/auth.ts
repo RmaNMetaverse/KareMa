@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { NextFunction, Request, Response } from 'express';
 import { prisma } from './prisma';
 import { env } from './env';
+import { can, PermissionKey, PermissionMap, permissionsOf } from './roles';
 
 export type JwtPayload = { uid: string };
 
@@ -16,6 +17,8 @@ declare global {
         name: string;
         role: 'ADMIN' | 'MEMBER' | 'GUEST';
         isActive: boolean;
+        permissions: PermissionMap;
+        can: (key: PermissionKey) => boolean;
       };
     }
   }
@@ -50,7 +53,10 @@ export async function loadUser(req: Request) {
   if (!token) return null;
   const payload = readToken(token);
   if (!payload) return null;
-  const user = await prisma.user.findUnique({ where: { id: payload.uid } });
+  const user = await prisma.user.findUnique({
+    where: { id: payload.uid },
+    include: { roleRef: true },
+  });
   if (!user || !user.isActive) return null;
   return user;
 }
@@ -58,20 +64,30 @@ export async function loadUser(req: Request) {
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   const user = await loadUser(req);
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const permissions = permissionsOf(user);
   req.user = {
     id: user.id,
     email: user.email,
     name: user.name,
     role: user.role,
     isActive: user.isActive,
+    permissions,
+    can: (key: PermissionKey) => can(permissions, key),
   };
   next();
 }
 
-export function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  if (req.user?.role !== 'ADMIN') return res.status(403).json({ error: 'Admin access required' });
-  next();
+/** Gate a route behind a single instance-wide permission. */
+export function requirePermission(key: PermissionKey) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user?.can(key)) {
+      return res.status(403).json({ error: 'You do not have permission to do that' });
+    }
+    next();
+  };
 }
+
+export const requireAdmin = requirePermission('admin.access');
 
 export function setAuthCookie(res: Response, token: string) {
   res.cookie('karema_token', token, {

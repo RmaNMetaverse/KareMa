@@ -27,6 +27,7 @@ export function Dashboard() {
   const [createOpen, setCreateOpen] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const navigate = useNavigate();
+  const canCreate = !!user?.permissions?.['boards.create'];
 
   const load = async (archived = showArchived) => {
     setLoading(true);
@@ -80,7 +81,7 @@ export function Dashboard() {
             <Archive size={15} />
             {showArchived ? 'Viewing archive' : 'Archive'}
           </button>
-          {user?.role !== 'GUEST' && (
+          {canCreate && (
             <button className="btn btn-primary" onClick={() => setCreateOpen(true)}>
               <Plus size={16} />
               New board
@@ -106,7 +107,7 @@ export function Dashboard() {
                 : 'Create your first board to start tracking work.'
             }
             action={
-              !showArchived && user?.role !== 'GUEST' ? (
+              !showArchived && canCreate ? (
                 <button className="btn btn-primary" onClick={() => setCreateOpen(true)}>
                   <Plus size={16} />
                   Create a board
@@ -141,7 +142,7 @@ export function Dashboard() {
               {rest.map((b) => (
                 <BoardCard key={b.id} board={b} onToggleStar={toggleStar} />
               ))}
-              {!showArchived && user?.role !== 'GUEST' && (
+              {!showArchived && canCreate && (
                 <button
                   onClick={() => setCreateOpen(true)}
                   className="group flex min-h-[10rem] flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-line text-muted transition-colors hover:border-primary/50 hover:text-primary"

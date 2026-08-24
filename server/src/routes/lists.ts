@@ -13,7 +13,7 @@ listsRouter.use(requireAuth);
 async function listAccess(req: any, listId: string) {
   const list = await prisma.list.findUnique({ where: { id: listId } });
   if (!list) return { list: null, access: null };
-  const access = await getBoardAccess(req.user.id, list.boardId, req.user.role);
+  const access = await getBoardAccess(req.user, list.boardId);
   return { list, access };
 }
 

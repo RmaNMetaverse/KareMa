@@ -20,13 +20,24 @@ const DEFAULT_LABELS = [
   { name: 'Polish', color: '#eab308' },
 ];
 
+/** New boards start with whatever label set an administrator configured. */
+async function labelPresets() {
+  const row = await prisma.setting.findUnique({ where: { key: 'labelPresets' } });
+  const value = row?.value as { name: string; color: string }[] | undefined;
+  if (!Array.isArray(value) || value.length === 0) return DEFAULT_LABELS;
+  return value
+    .filter((l) => l && typeof l.color === 'string')
+    .map((l) => ({ name: String(l.name ?? '').slice(0, 60), color: l.color }))
+    .slice(0, 30);
+}
+
 /** Boards visible to the current user. */
 boardsRouter.get('/', async (req, res) => {
-  const isAdmin = req.user!.role === 'ADMIN';
+  const seesEverything = req.user!.can('boards.viewAll');
   const boards = await prisma.board.findMany({
     where: {
       isArchived: req.query.archived === 'true',
-      ...(isAdmin
+      ...(seesEverything
         ? {}
         : { OR: [{ members: { some: { userId: req.user!.id } } }, { isPublic: true }] }),
     },
@@ -43,14 +54,15 @@ boardsRouter.get('/', async (req, res) => {
     return {
       ...b,
       starred: mine?.starred ?? false,
-      myRole: mine?.role ?? (isAdmin ? 'ADMIN' : 'VIEWER'),
+      myRole: mine?.role ?? (seesEverything ? 'ADMIN' : 'VIEWER'),
     };
   });
   res.json({ boards: withMeta });
 });
 
 boardsRouter.post('/', async (req, res) => {
-  if (req.user!.role === 'GUEST') return res.status(403).json({ error: 'Guests cannot create boards' });
+  if (!req.user!.can('boards.create'))
+    return res.status(403).json({ error: 'Your role cannot create boards' });
 
   const parsed = z
     .object({
@@ -73,7 +85,7 @@ boardsRouter.post('/', async (req, res) => {
       icon: parsed.data.icon,
       createdById: req.user!.id,
       members: { create: { userId: req.user!.id, role: 'OWNER' } },
-      labels: { create: DEFAULT_LABELS },
+      labels: { create: await labelPresets() },
       ...(parsed.data.withStarterLists === false
         ? {}
         : {
@@ -100,7 +112,7 @@ boardsRouter.post('/', async (req, res) => {
 
 /** Full board payload: lists with their cards. */
 boardsRouter.get('/:id', async (req, res) => {
-  const access = await getBoardAccess(req.user!.id, req.params.id, req.user!.role);
+  const access = await getBoardAccess(req.user!, req.params.id);
   if (!access) return res.status(404).json({ error: 'Board not found' });
 
   const board = await prisma.board.findUnique({
@@ -136,7 +148,7 @@ boardsRouter.get('/:id', async (req, res) => {
 });
 
 boardsRouter.patch('/:id', async (req, res) => {
-  const access = await getBoardAccess(req.user!.id, req.params.id, req.user!.role);
+  const access = await getBoardAccess(req.user!, req.params.id);
   if (!access?.canManage) return res.status(403).json({ error: 'You cannot edit this board' });
 
   const parsed = z
@@ -158,7 +170,7 @@ boardsRouter.patch('/:id', async (req, res) => {
 });
 
 boardsRouter.post('/:id/star', async (req, res) => {
-  const access = await getBoardAccess(req.user!.id, req.params.id, req.user!.role);
+  const access = await getBoardAccess(req.user!, req.params.id);
   if (!access) return res.status(404).json({ error: 'Board not found' });
 
   const existing = await prisma.boardMember.findUnique({
@@ -174,8 +186,8 @@ boardsRouter.post('/:id/star', async (req, res) => {
 });
 
 boardsRouter.delete('/:id', async (req, res) => {
-  const access = await getBoardAccess(req.user!.id, req.params.id, req.user!.role);
-  const isOwner = access?.role === 'OWNER' || req.user!.role === 'ADMIN';
+  const access = await getBoardAccess(req.user!, req.params.id);
+  const isOwner = access?.role === 'OWNER' || req.user!.can('boards.deleteAny');
   if (!isOwner) return res.status(403).json({ error: 'Only the board owner can delete it' });
 
   await prisma.board.delete({ where: { id: req.params.id } });
@@ -185,7 +197,7 @@ boardsRouter.delete('/:id', async (req, res) => {
 /* ------------------------------------------------------------------ members */
 
 boardsRouter.post('/:id/members', async (req, res) => {
-  const access = await getBoardAccess(req.user!.id, req.params.id, req.user!.role);
+  const access = await getBoardAccess(req.user!, req.params.id);
   if (!access?.canManage) return res.status(403).json({ error: 'You cannot manage this board' });
 
   const parsed = z
@@ -217,7 +229,7 @@ boardsRouter.post('/:id/members', async (req, res) => {
 });
 
 boardsRouter.patch('/:id/members/:userId', async (req, res) => {
-  const access = await getBoardAccess(req.user!.id, req.params.id, req.user!.role);
+  const access = await getBoardAccess(req.user!, req.params.id);
   if (!access?.canManage) return res.status(403).json({ error: 'You cannot manage this board' });
 
   const role = z.enum(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']).safeParse(req.body?.role);
@@ -233,7 +245,7 @@ boardsRouter.patch('/:id/members/:userId', async (req, res) => {
 });
 
 boardsRouter.delete('/:id/members/:userId', async (req, res) => {
-  const access = await getBoardAccess(req.user!.id, req.params.id, req.user!.role);
+  const access = await getBoardAccess(req.user!, req.params.id);
   const removingSelf = req.params.userId === req.user!.id;
   if (!access?.canManage && !removingSelf)
     return res.status(403).json({ error: 'You cannot manage this board' });
@@ -257,7 +269,7 @@ boardsRouter.delete('/:id/members/:userId', async (req, res) => {
 /* ------------------------------------------------------------------- labels */
 
 boardsRouter.post('/:id/labels', async (req, res) => {
-  const access = await getBoardAccess(req.user!.id, req.params.id, req.user!.role);
+  const access = await getBoardAccess(req.user!, req.params.id);
   if (!access?.canEdit) return res.status(403).json({ error: 'You cannot edit this board' });
 
   const parsed = z
@@ -271,7 +283,7 @@ boardsRouter.post('/:id/labels', async (req, res) => {
 });
 
 boardsRouter.patch('/:id/labels/:labelId', async (req, res) => {
-  const access = await getBoardAccess(req.user!.id, req.params.id, req.user!.role);
+  const access = await getBoardAccess(req.user!, req.params.id);
   if (!access?.canEdit) return res.status(403).json({ error: 'You cannot edit this board' });
 
   const parsed = z
@@ -285,7 +297,7 @@ boardsRouter.patch('/:id/labels/:labelId', async (req, res) => {
 });
 
 boardsRouter.delete('/:id/labels/:labelId', async (req, res) => {
-  const access = await getBoardAccess(req.user!.id, req.params.id, req.user!.role);
+  const access = await getBoardAccess(req.user!, req.params.id);
   if (!access?.canEdit) return res.status(403).json({ error: 'You cannot edit this board' });
 
   await prisma.label.delete({ where: { id: req.params.labelId } });
@@ -296,7 +308,7 @@ boardsRouter.delete('/:id/labels/:labelId', async (req, res) => {
 /* -------------------------------------------------------------------- lists */
 
 boardsRouter.post('/:id/lists', async (req, res) => {
-  const access = await getBoardAccess(req.user!.id, req.params.id, req.user!.role);
+  const access = await getBoardAccess(req.user!, req.params.id);
   if (!access?.canEdit) return res.status(403).json({ error: 'You cannot edit this board' });
 
   const parsed = z
@@ -327,7 +339,7 @@ boardsRouter.post('/:id/lists', async (req, res) => {
 /* ----------------------------------------------------------------- activity */
 
 boardsRouter.get('/:id/activity', async (req, res) => {
-  const access = await getBoardAccess(req.user!.id, req.params.id, req.user!.role);
+  const access = await getBoardAccess(req.user!, req.params.id);
   if (!access) return res.status(404).json({ error: 'Board not found' });
 
   const activities = await prisma.activity.findMany({

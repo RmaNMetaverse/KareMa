@@ -23,6 +23,8 @@ export function MentionInput({
   onSubmit,
   autoFocus,
   className,
+  inputRef,
+  onKeyDown,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -32,8 +34,15 @@ export function MentionInput({
   onSubmit?: () => void;
   autoFocus?: boolean;
   className?: string;
+  /** Lets a parent (the rich-text toolbar) reach the textarea. */
+  inputRef?: React.MutableRefObject<HTMLTextAreaElement | null>;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
+  const attachRef = (el: HTMLTextAreaElement | null) => {
+    (ref as React.MutableRefObject<HTMLTextAreaElement | null>).current = el;
+    if (inputRef) inputRef.current = el;
+  };
   const [query, setQuery] = useState<string | null>(null);
   const [anchor, setAnchor] = useState(0);
   const [cursor, setCursor] = useState(0);
@@ -86,7 +95,7 @@ export function MentionInput({
   return (
     <div className="relative">
       <textarea
-        ref={ref}
+        ref={attachRef}
         value={value}
         rows={rows}
         autoFocus={autoFocus}
@@ -99,6 +108,8 @@ export function MentionInput({
         onClick={(e) => detectMention(value, (e.target as HTMLTextAreaElement).selectionStart)}
         onBlur={() => setTimeout(() => setQuery(null), 140)}
         onKeyDown={(e) => {
+          onKeyDown?.(e);
+          if (e.defaultPrevented) return;
           if (query !== null && matches.length) {
             if (e.key === 'ArrowDown') {
               e.preventDefault();

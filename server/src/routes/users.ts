@@ -21,7 +21,10 @@ usersRouter.get('/', async (req, res) => {
         : {}),
     },
     orderBy: { name: 'asc' },
-    select: publicUser,
+    select: {
+      ...publicUser,
+      roleRef: { select: { id: true, key: true, name: true, color: true } },
+    },
     take: 100,
   });
   res.json({ users });

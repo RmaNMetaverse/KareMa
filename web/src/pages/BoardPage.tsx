@@ -21,10 +21,12 @@ import {
 import {
   Filter,
   Plus,
+  Rows3,
   Settings2,
   SlidersHorizontal,
   Star,
   Tag,
+  Trello,
   Users,
   X,
 } from 'lucide-react';
@@ -37,6 +39,7 @@ import { CardData, CardTileGhost } from '../components/board/CardTile';
 import { ListColumn, ListData } from '../components/board/ListColumn';
 import { CardModal } from '../components/board/CardModal';
 import { BoardSettingsModal } from '../components/board/BoardSettingsModal';
+import { BoardListView } from '../components/board/BoardListView';
 
 type BoardMember = {
   userId: string;
@@ -95,6 +98,22 @@ export function BoardPage() {
   const [newListTitle, setNewListTitle] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [confirmDeleteList, setConfirmDeleteList] = useState<string | null>(null);
+  const [view, setView] = useState<'board' | 'list'>(() => {
+    try {
+      return (localStorage.getItem(`karema.view.${boardId}`) as 'board' | 'list') || 'board';
+    } catch {
+      return 'board';
+    }
+  });
+
+  const switchView = (next: 'board' | 'list') => {
+    setView(next);
+    try {
+      localStorage.setItem(`karema.view.${boardId}`, next);
+    } catch {
+      /* private mode */
+    }
+  };
 
   const openCardId = searchParams.get('card');
   const dragOriginRef = useRef<{ listId: string; index: number } | null>(null);
@@ -505,6 +524,25 @@ export function BoardPage() {
             )}
           </div>
 
+          <div className="flex rounded-md border border-line p-0.5">
+            {([
+              ['board', 'Board', <Trello size={14} key="b" />],
+              ['list', 'List', <Rows3 size={14} key="l" />],
+            ] as const).map(([id, label, icon]) => (
+              <button
+                key={id}
+                onClick={() => switchView(id)}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-xs font-medium transition-colors',
+                  view === id ? 'bg-primary/16 text-primary' : 'text-muted hover:text-ink'
+                )}
+              >
+                {icon}
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            ))}
+          </div>
+
           <FilterMenu
             board={board}
             filters={filters}
@@ -543,7 +581,18 @@ export function BoardPage() {
         </div>
       )}
 
-      {/* ---------------------------------------------------------- the board */}
+      {/* ------------------------------------------------------------- the list */}
+      {view === 'list' ? (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <BoardListView
+            lists={filtered}
+            canEdit={canEdit}
+            onOpenCard={openCard}
+            onChanged={load}
+          />
+        </div>
+      ) : (
+      /* --------------------------------------------------------- the board */
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -644,6 +693,7 @@ export function BoardPage() {
           ) : null}
         </DragOverlay>
       </DndContext>
+      )}
 
       {openCardId && (
         <CardModal
@@ -651,6 +701,7 @@ export function BoardPage() {
           board={board}
           onClose={closeCard}
           onChanged={load}
+          onOpenCard={openCard}
         />
       )}
 

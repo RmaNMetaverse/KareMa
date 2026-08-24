@@ -15,7 +15,7 @@ commentsRouter.get('/', async (req, res) => {
   const card = await prisma.card.findUnique({ where: { id: cardId } });
   if (!card) return res.status(404).json({ error: 'Card not found' });
 
-  const access = await getBoardAccess(req.user!.id, card.boardId, req.user!.role);
+  const access = await getBoardAccess(req.user!, card.boardId);
   if (!access) return res.status(403).json({ error: 'No access to this card' });
 
   const comments = await prisma.comment.findMany({
@@ -35,7 +35,7 @@ commentsRouter.post('/', async (req, res) => {
   const card = await prisma.card.findUnique({ where: { id: parsed.data.cardId } });
   if (!card) return res.status(404).json({ error: 'Card not found' });
 
-  const access = await getBoardAccess(req.user!.id, card.boardId, req.user!.role);
+  const access = await getBoardAccess(req.user!, card.boardId);
   if (!access?.canEdit) return res.status(403).json({ error: 'You cannot comment on this board' });
 
   const comment = await prisma.comment.create({
@@ -84,7 +84,7 @@ commentsRouter.post('/', async (req, res) => {
 commentsRouter.patch('/:id', async (req, res) => {
   const comment = await prisma.comment.findUnique({ where: { id: req.params.id } });
   if (!comment) return res.status(404).json({ error: 'Comment not found' });
-  if (comment.authorId !== req.user!.id && req.user!.role !== 'ADMIN')
+  if (comment.authorId !== req.user!.id && !req.user!.can('admin.access'))
     return res.status(403).json({ error: 'You can only edit your own comments' });
 
   const body = z.string().min(1).max(10000).safeParse(req.body?.body);
@@ -106,8 +106,8 @@ commentsRouter.delete('/:id', async (req, res) => {
   if (!comment) return res.status(404).json({ error: 'Comment not found' });
 
   const card = await prisma.card.findUnique({ where: { id: comment.cardId } });
-  const access = card ? await getBoardAccess(req.user!.id, card.boardId, req.user!.role) : null;
-  const allowed = comment.authorId === req.user!.id || req.user!.role === 'ADMIN' || access?.canManage;
+  const access = card ? await getBoardAccess(req.user!, card.boardId) : null;
+  const allowed = comment.authorId === req.user!.id || req.user!.can('admin.access') || access?.canManage;
   if (!allowed) return res.status(403).json({ error: 'You cannot delete this comment' });
 
   await prisma.comment.delete({ where: { id: comment.id } });

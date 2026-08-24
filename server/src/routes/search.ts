@@ -10,8 +10,8 @@ searchRouter.get('/', async (req, res) => {
   const q = String(req.query.q || '').trim();
   if (q.length < 2) return res.json({ cards: [], boards: [] });
 
-  const isAdmin = req.user!.role === 'ADMIN';
-  const visibleBoard = isAdmin
+  const seesEverything = req.user!.can('boards.viewAll');
+  const visibleBoard = seesEverything
     ? {}
     : { OR: [{ members: { some: { userId: req.user!.id } } }, { isPublic: true }] };
 

@@ -30,7 +30,7 @@ attachmentsRouter.post('/', uploadAny.single('file'), async (req, res) => {
     return res.status(404).json({ error: 'Card not found' });
   }
 
-  const access = await getBoardAccess(req.user!.id, card.boardId, req.user!.role);
+  const access = await getBoardAccess(req.user!, card.boardId);
   if (!access?.canEdit) {
     removeStoredFile(file.filename);
     return res.status(403).json({ error: 'You cannot edit this board' });
@@ -42,7 +42,7 @@ attachmentsRouter.post('/', uploadAny.single('file'), async (req, res) => {
       removeStoredFile(file.filename);
       return res.status(400).json({ error: 'That comment is not on this card' });
     }
-    if (comment.authorId !== req.user!.id && req.user!.role !== 'ADMIN') {
+    if (comment.authorId !== req.user!.id && !req.user!.can('admin.access')) {
       removeStoredFile(file.filename);
       return res.status(403).json({ error: 'You can only attach files to your own comments' });
     }
@@ -107,7 +107,7 @@ attachmentsRouter.post('/link', async (req, res) => {
   const card = await prisma.card.findUnique({ where: { id: parsed.data.cardId } });
   if (!card) return res.status(404).json({ error: 'Card not found' });
 
-  const access = await getBoardAccess(req.user!.id, card.boardId, req.user!.role);
+  const access = await getBoardAccess(req.user!, card.boardId);
   if (!access?.canEdit) return res.status(403).json({ error: 'You cannot edit this board' });
 
   const attachment = await prisma.attachment.create({
@@ -136,7 +136,7 @@ attachmentsRouter.delete('/:id', async (req, res) => {
   const card = await prisma.card.findUnique({ where: { id: attachment.cardId } });
   if (!card) return res.status(404).json({ error: 'Card not found' });
 
-  const access = await getBoardAccess(req.user!.id, card.boardId, req.user!.role);
+  const access = await getBoardAccess(req.user!, card.boardId);
   const allowed = access?.canManage || attachment.uploaderId === req.user!.id;
   if (!access?.canEdit || !allowed)
     return res.status(403).json({ error: 'You cannot remove this attachment' });

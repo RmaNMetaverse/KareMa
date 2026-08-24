@@ -1,4 +1,7 @@
 import { prisma } from './prisma';
+import { can, PermissionMap } from './roles';
+
+type Actor = { id: string; permissions: PermissionMap };
 
 export type Access = {
   role: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
@@ -7,8 +10,9 @@ export type Access = {
   canManage: boolean;
 };
 
-/** Resolve a user's effective access to a board. Global ADMINs get board ADMIN. */
-export async function getBoardAccess(userId: string, boardId: string, globalRole: string): Promise<Access | null> {
+/** Resolve a user's effective access to a board. Instance-wide viewers get board ADMIN. */
+export async function getBoardAccess(actor: Actor, boardId: string): Promise<Access | null> {
+  const userId = actor.id;
   const board = await prisma.board.findUnique({ where: { id: boardId }, select: { id: true, isPublic: true } });
   if (!board) return null;
 
@@ -17,7 +21,7 @@ export async function getBoardAccess(userId: string, boardId: string, globalRole
   });
 
   let role: Access['role'] | null = membership?.role ?? null;
-  if (!role && globalRole === 'ADMIN') role = 'ADMIN';
+  if (!role && can(actor.permissions, 'boards.viewAll')) role = 'ADMIN';
   if (!role && board.isPublic) role = 'VIEWER';
   if (!role) return null;
 

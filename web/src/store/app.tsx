@@ -10,11 +10,21 @@ import {
   saveLocalPrefs,
 } from '../lib/theme';
 
+export type Role = {
+  id: string;
+  key: string;
+  name: string;
+  color: string;
+};
+
 export type User = {
   id: string;
   name: string;
   email: string;
+  /** Legacy tier, kept for compatibility — prefer `permissions`. */
   role: 'ADMIN' | 'MEMBER' | 'GUEST';
+  roleRef?: Role | null;
+  permissions?: Record<string, boolean>;
   avatarColor: string;
   avatarUrl?: string | null;
   title?: string | null;

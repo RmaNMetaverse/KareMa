@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   Activity,
   BarChart3,
+  ShieldCheck,
   HardDrive,
   KeyRound,
   LayoutGrid,
@@ -21,6 +22,7 @@ import { useApp } from '../store/app';
 import { cn, formatBytes, formatDate, timeAgo } from '../lib/utils';
 import { PRESET_PRIMARIES } from '../lib/theme';
 import { UserReviewPanel } from '../components/admin/UserReviewPanel';
+import { LabelPresetsCard, Role, RolesTab } from '../components/admin/RolesTab';
 import {
   Avatar,
   ConfirmDialog,
@@ -32,9 +34,10 @@ import {
 } from '../components/ui';
 
 const TABS = [
-  { id: 'overview', label: 'Overview', icon: <Activity size={16} /> },
-  { id: 'users', label: 'Users', icon: <Users size={16} /> },
-  { id: 'boards', label: 'Boards', icon: <LayoutGrid size={16} /> },
+  { id: 'overview', label: 'Overview', icon: <Activity size={16} />, permission: 'admin.access' },
+  { id: 'users', label: 'Users', icon: <Users size={16} />, permission: 'users.manage' },
+  { id: 'roles', label: 'Roles', icon: <ShieldCheck size={16} />, permission: 'roles.manage' },
+  { id: 'boards', label: 'Boards', icon: <LayoutGrid size={16} />, permission: 'admin.access' },
 ];
 
 const ROLE_STYLES: Record<string, string> = {
@@ -46,6 +49,8 @@ const ROLE_STYLES: Record<string, string> = {
 export function AdminPage() {
   const { tab = 'overview' } = useParams();
   const navigate = useNavigate();
+  const { user } = useApp();
+  const allowed = TABS.filter((t) => user?.permissions?.[t.permission]);
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-7 sm:px-6">
@@ -60,7 +65,7 @@ export function AdminPage() {
       </div>
 
       <div className="mt-6 flex gap-1 border-b border-line/70">
-        {TABS.map((t) => (
+        {allowed.map((t) => (
           <button
             key={t.id}
             onClick={() => navigate(`/admin/${t.id}`)}
@@ -78,6 +83,12 @@ export function AdminPage() {
       <div className="py-6">
         {tab === 'overview' && <Overview />}
         {tab === 'users' && <UsersTab />}
+        {tab === 'roles' && (
+          <div className="space-y-6">
+            <RolesTab />
+            <LabelPresetsCard />
+          </div>
+        )}
         {tab === 'boards' && <BoardsTab />}
       </div>
     </div>
@@ -145,6 +156,7 @@ function UsersTab() {
   const [resetting, setResetting] = useState<any>(null);
   const [deleting, setDeleting] = useState<any>(null);
   const [reviewing, setReviewing] = useState<any>(null);
+  const [roles, setRoles] = useState<Role[]>([]);
 
   const load = async () => {
     setLoading(true);
@@ -158,18 +170,22 @@ function UsersTab() {
 
   useEffect(() => {
     load();
+    get<{ roles: Role[] }>('/api/admin/roles')
+      .then((r) => setRoles(r.roles))
+      .catch(() => undefined);
   }, []);
 
   const filtered = users.filter((u) =>
     `${u.name} ${u.email}`.toLowerCase().includes(query.toLowerCase())
   );
 
-  const setRole = async (u: any, role: string) => {
+  const setRole = async (u: any, roleId: string) => {
     try {
-      await patch(`/api/admin/users/${u.id}`, { role });
+      await patch(`/api/admin/users/${u.id}`, { roleId });
       load();
     } catch (err: any) {
       toast({ title: err.message, tone: 'error' });
+      load();
     }
   };
 
@@ -252,13 +268,21 @@ function UsersTab() {
                   </td>
                   <td className="hidden px-4 py-3 md:table-cell">
                     <select
-                      className={cn('input w-28 py-1 text-xs', ROLE_STYLES[u.role])}
-                      value={u.role}
+                      className="input w-32 py-1 text-xs"
+                      style={
+                        u.roleRef
+                          ? { color: u.roleRef.color, background: `${u.roleRef.color}18` }
+                          : undefined
+                      }
+                      value={u.roleId ?? ''}
                       onChange={(e) => setRole(u, e.target.value)}
                     >
-                      <option value="ADMIN">Admin</option>
-                      <option value="MEMBER">Member</option>
-                      <option value="GUEST">Guest</option>
+                      {!u.roleId && <option value="">No role</option>}
+                      {roles.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.name}
+                        </option>
+                      ))}
                     </select>
                   </td>
                   <td className="hidden px-4 py-3 text-xs text-muted lg:table-cell">
@@ -321,6 +345,7 @@ function UsersTab() {
       <UserFormModal
         open={createOpen || !!editing}
         user={editing}
+        roles={roles}
         onClose={() => {
           setCreateOpen(false);
           setEditing(null);
@@ -366,11 +391,13 @@ function UsersTab() {
 function UserFormModal({
   open,
   user,
+  roles,
   onClose,
   onSaved,
 }: {
   open: boolean;
   user: any;
+  roles: Role[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -378,7 +405,7 @@ function UserFormModal({
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('MEMBER');
+  const [roleId, setRoleId] = useState('');
   const [title, setTitle] = useState('');
   const [color, setColor] = useState('#6366f1');
   const [mustChange, setMustChange] = useState(true);
@@ -389,11 +416,11 @@ function UserFormModal({
     setName(user?.name ?? '');
     setEmail(user?.email ?? '');
     setPassword('');
-    setRole(user?.role ?? 'MEMBER');
+    setRoleId(user?.roleId ?? roles.find((r) => r.key === 'member')?.id ?? roles[0]?.id ?? '');
     setTitle(user?.title ?? '');
     setColor(user?.avatarColor ?? PRESET_PRIMARIES[Math.floor(Math.random() * 12)].value);
     setMustChange(true);
-  }, [open, user]);
+  }, [open, user, roles]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -403,7 +430,7 @@ function UserFormModal({
         await patch(`/api/admin/users/${user.id}`, {
           name: name.trim(),
           email: email.trim(),
-          role,
+          roleId,
           title: title.trim() || null,
           avatarColor: color,
         });
@@ -413,7 +440,7 @@ function UserFormModal({
           name: name.trim(),
           email: email.trim(),
           password,
-          role,
+          roleId,
           title: title.trim() || undefined,
           avatarColor: color,
           mustChangePw: mustChange,
@@ -485,19 +512,15 @@ function UserFormModal({
         )}
 
         <Field
-          label="Access level"
-          hint={
-            role === 'ADMIN'
-              ? 'Full control, including this admin panel'
-              : role === 'MEMBER'
-                ? 'Can create boards and edit the ones they belong to'
-                : 'Read-only unless invited to a board as a member'
-          }
+          label="Role"
+          hint={roles.find((r) => r.id === roleId)?.description || 'What they may do across KareMa'}
         >
-          <select className="input" value={role} onChange={(e) => setRole(e.target.value)}>
-            <option value="ADMIN">Administrator</option>
-            <option value="MEMBER">Member</option>
-            <option value="GUEST">Guest</option>
+          <select className="input" value={roleId} onChange={(e) => setRoleId(e.target.value)}>
+            {roles.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
           </select>
         </Field>
 

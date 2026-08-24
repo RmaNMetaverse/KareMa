@@ -34,7 +34,8 @@ import {
   timeAgo,
 } from '../../lib/utils';
 import { Avatar, ConfirmDialog, MenuItem, Modal, Popover, Spinner } from '../ui';
-import { MentionInput } from './MentionInput';
+import { RichTextEditor } from './RichTextEditor';
+import { ParentBreadcrumb, ParentPicker, Subtasks } from './Subtasks';
 import { CommentComposer, CommentItem } from './CommentThread';
 
 type Props = {
@@ -42,9 +43,10 @@ type Props = {
   board: any;
   onClose: () => void;
   onChanged: () => void;
+  onOpenCard?: (id: string) => void;
 };
 
-export function CardModal({ cardId, board, onClose, onChanged }: Props) {
+export function CardModal({ cardId, board, onClose, onChanged, onOpenCard }: Props) {
   const { user, toast } = useApp();
   const [card, setCard] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -232,6 +234,15 @@ export function CardModal({ cardId, board, onClose, onChanged }: Props) {
               </button>
             )}
             <div className="min-w-0 flex-1">
+              {card.parent && (
+                <ParentBreadcrumb
+                  parent={card.parent}
+                  cardId={card.id}
+                  canEdit={canEdit}
+                  onChanged={load}
+                  onOpenCard={onOpenCard}
+                />
+              )}
               <textarea
                 value={titleDraft}
                 disabled={!canEdit}
@@ -279,6 +290,7 @@ export function CardModal({ cardId, board, onClose, onChanged }: Props) {
                   <button className="btn btn-subtle text-xs" onClick={() => setNewChecklist(true)}>
                     <CheckSquare size={14} /> Checklist
                   </button>
+                  <ParentPicker card={card} onChanged={load} />
                   <ColorPicker card={card} onUpdate={update} />
                 </div>
               )}
@@ -371,13 +383,13 @@ export function CardModal({ cardId, board, onClose, onChanged }: Props) {
                 <SectionTitle icon={<AlignLeft size={15} />}>Description</SectionTitle>
                 {editingDesc ? (
                   <div className="mt-2">
-                    <MentionInput
+                    <RichTextEditor
                       value={descDraft}
                       onChange={setDescDraft}
                       people={people}
-                      rows={6}
+                      rows={7}
                       autoFocus
-                      placeholder="Add more detail. Markdown-ish formatting and @mentions work here."
+                      placeholder="Add more detail. Use the toolbar, or type @ to mention someone."
                     />
                     <div className="mt-2 flex gap-2">
                       <button
@@ -420,6 +432,13 @@ export function CardModal({ cardId, board, onClose, onChanged }: Props) {
                   )
                 )}
               </section>
+
+              <Subtasks
+                card={card}
+                canEdit={canEdit}
+                onChanged={load}
+                onOpenCard={onOpenCard}
+              />
 
               {/* checklists */}
               {(card.checklists.length > 0 || newChecklist) && (
@@ -554,7 +573,7 @@ export function CardModal({ cardId, board, onClose, onChanged }: Props) {
                       comment={c}
                       cardId={cardId}
                       people={people}
-                      canManage={c.author.id === user?.id || user?.role === 'ADMIN'}
+                      canManage={c.author.id === user?.id || !!user?.permissions?.['admin.access']}
                       onChanged={load}
                     />
                   ))}
@@ -1249,6 +1268,22 @@ function describeActivity(a: any) {
       return 'commented';
     case 'attachment.added':
       return `attached ${d.filename}`;
+    case 'checklist.created':
+      return `added the checklist "${d.checklist}"`;
+    case 'checklist.item.added':
+      return `added "${d.item}" to the checklist`;
+    case 'checklist.item.edited':
+      return `renamed a checklist item to "${d.item}"`;
+    case 'checklist.checked':
+      return `ticked "${d.item}" (${d.done}/${d.total})`;
+    case 'checklist.unchecked':
+      return `unticked "${d.item}" (${d.done}/${d.total})`;
+    case 'card.subtask.added':
+      return `added the subtask "${d.title}"`;
+    case 'card.parent.set':
+      return `made this a subtask of "${d.parent}"`;
+    case 'card.parent.cleared':
+      return 'detached this from its parent';
     default:
       return a.type;
   }

@@ -7,6 +7,7 @@ import { env } from './lib/env';
 import { prisma } from './lib/prisma';
 import { hashPassword } from './lib/auth';
 import { initRealtime } from './lib/realtime';
+import { ensureRoles } from './lib/roles';
 import { authRouter } from './routes/auth';
 import { adminRouter } from './routes/admin';
 import { usersRouter } from './routes/users';
@@ -50,12 +51,14 @@ async function ensureAdmin() {
   const count = await prisma.user.count();
   if (count > 0) return;
   const email = env.adminEmail.trim().toLowerCase();
+  const administrator = await prisma.role.findUnique({ where: { key: 'administrator' } });
   const admin = await prisma.user.create({
     data: {
       email,
       name: env.adminName,
       passwordHash: await hashPassword(env.adminPassword),
       role: 'ADMIN',
+      roleId: administrator?.id,
       avatarColor: '#6366f1',
       mustChangePw: env.adminPassword === 'admin1234',
     },
@@ -165,6 +168,7 @@ async function start() {
     }
   }
 
+  await ensureRoles();
   await ensureAdmin();
 
   const server = http.createServer(app);

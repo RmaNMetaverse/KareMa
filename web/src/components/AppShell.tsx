@@ -42,6 +42,7 @@ export function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
   const collapsed = prefs.sidebarCollapsed;
+  const can = (key: string) => !!user?.permissions?.[key];
 
   const loadBoards = () =>
     get<{ boards: BoardSummary[] }>('/api/boards')
@@ -189,7 +190,7 @@ export function AppShell() {
           </div>
 
           <div className="border-t border-line/60 p-2">
-            {user?.role === 'ADMIN' && (
+            {can('admin.access') && (
               <NavLink
                 to="/admin"
                 className={({ isActive }) =>
@@ -293,7 +294,7 @@ export function AppShell() {
                     >
                       Appearance
                     </MenuItem>
-                    {user?.role === 'ADMIN' && (
+                    {can('admin.access') && (
                       <MenuItem
                         icon={<Shield size={15} />}
                         onClick={() => {
