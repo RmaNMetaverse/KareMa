@@ -28,7 +28,7 @@ machine in your office and takes one double-click to start.
 
 - **One command to deploy.** Docker does the rest — database, file storage, web server.
 - **Nothing leaves the building.** No accounts to create anywhere, no telemetry, no bill.
-- **Small enough to read.** ~11k lines of TypeScript across an API and a React app.
+- **Small enough to read.** ~14k lines of TypeScript across an API and a React app.
 
 ---
 
@@ -50,6 +50,40 @@ land on your screen as they happen — no refresh, no lost work.
   what is hidden
 - **Search everything** with `Ctrl` + `K` from anywhere
 - **My work** gathers every card assigned to you across all boards, grouped by urgency
+
+### Two ways to look at the same work
+
+<img src="docs/screenshots/list-view.png" alt="The Jira-style list view">
+
+Every board flips between the **Kanban board** and a **list view** modelled on Jira's,
+with one click in the header. The list is not a read-only export — it is the same board:
+
+- Sortable columns for key, summary, status, priority, assignee and due date
+- **Change status or priority inline** from the row; changing status moves the card
+  between lists exactly as dragging it would
+- **Sub-tasks nest under their parent** and fold away with a chevron
+- Card key (`#13`), comment and attachment counts, labels and avatars all in one line
+- Your choice of view is remembered per board
+
+### Cards inside cards
+
+<img src="docs/screenshots/card-subtasks.png" alt="A card with sub-tasks and a rich description">
+
+Any card can be the parent of any other card on the same board. Break an epic into
+sub-tasks from the card itself, attach an existing card to a parent, or detach it again.
+The parent shows a progress bar and a live `2/4` count, each child links straight to its
+own card, and a breadcrumb on the child points back up. Cycles are refused, and deleting
+a parent leaves its children standing on their own rather than taking them with it.
+
+### A real editor for descriptions and comments
+
+<img src="docs/screenshots/rich-editor.png" alt="The rich text editor toolbar">
+
+Descriptions and comments get a formatting toolbar: **bold**, *italic*, `inline code`,
+headings, bulleted, numbered and task lists, quotes, fenced code blocks and links —
+with `Ctrl` + `B` / `I` / `E` / `K` shortcuts and a **Preview** tab. It writes plain
+markdown, so what you type stays readable and portable, and `@mentions` keep working
+inside it.
 
 ### Conversations that carry their evidence
 
@@ -84,13 +118,31 @@ The rest of the panel handles the ordinary things: create accounts, set access l
 reset passwords, deactivate or delete people, and see every board, card and byte of
 attachment storage on the instance.
 
-Three access levels:
+### Roles you define yourself
 
-| Level | Can do |
+<img src="docs/screenshots/admin-roles.png" alt="The roles tab of the admin panel">
+
+KareMa ships with three built-in roles — **Administrator**, **Member** and **Guest** —
+but an administrator can create as many more as the studio needs: *Producer*,
+*Tech Artist*, *Publisher QA*, whatever fits. Each role is a named colour plus a set of
+permissions:
+
+| Permission | What it grants |
 | --- | --- |
-| **Administrator** | Everything, including the admin panel and the user reviews |
-| **Member** | Create boards, and edit the boards they belong to |
-| **Guest** | Read-only, unless invited to a specific board as a member |
+| `admin.access` | Open the admin panel |
+| `users.manage` | Create, edit, deactivate and delete people |
+| `roles.manage` | Add, edit and delete roles |
+| `reports.view` | Review anyone's work |
+| `labels.manage` | Edit the label presets |
+| `boards.create` | Create new boards |
+| `boards.viewAll` | See every board on the instance |
+| `boards.deleteAny` | Delete any board |
+
+Board membership stays separate — that is still set per board as Owner, Admin, Member or
+Viewer. Changing a role takes effect on the next request, no re-login needed.
+
+The same tab holds the **label presets**: the labels every new board starts with, edited
+once instead of on every board.
 
 New accounts can be handed a temporary password; that person is then required to choose
 their own the first time they sign in. The last active administrator can never be
@@ -335,14 +387,17 @@ deliberately does not do.
 ```
 server/                    Node 22 · TypeScript · Express · Prisma · Socket.IO
   prisma/schema.prisma     the entire data model, one file
-  src/lib/                 auth, permissions, realtime, notifications, uploads, ordering
+  src/lib/                 auth, roles, permissions, realtime, notifications,
+                           uploads, ordering
   src/routes/              auth · admin · users · boards · lists · cards
                            comments · attachments · notifications · search
 web/                       React 18 · TypeScript · Vite · Tailwind · dnd-kit
   src/lib/theme.ts         the theming engine — modes, colours, glass, density
+  src/lib/utils.ts         the markdown renderer behind descriptions and comments
   src/styles/index.css     design tokens, liquid glass, component classes
-  src/components/board/    card tile, list column, card modal, comments, pickers
-  src/components/admin/    the per-user review panel
+  src/components/board/    card tile, list column, card modal, list view,
+                           rich text editor, sub-tasks, comments, pickers
+  src/components/admin/    the roles tab and the per-user review panel
   src/pages/               login · dashboard · board · my work · settings · admin
 ```
 
@@ -360,6 +415,13 @@ A few decisions worth knowing about:
   the board in question. The frontend hiding a button is never what protects the data.
 - **Comment attachments are card attachments with a `commentId`.** They stay out of the
   card's own attachment list, and they are cleaned off disk when the comment goes.
+- **Roles are rows, not an enum.** A role carries a permission map, so adding a
+  permission is a checkbox rather than a migration. The old three-tier column is still
+  written alongside it, which keeps older API clients working.
+- **Rich text is stored as markdown, not HTML.** Nothing user-written is ever inserted
+  as raw HTML — the renderer escapes first and builds the markup itself.
+- **The list view is the board.** It reads the same lists and cards; changing a row's
+  status moves the card between lists through the same endpoint dragging uses.
 
 ---
 
@@ -398,6 +460,7 @@ Being straight about the edges, so nobody is surprised:
 - No email — notifications are in-app only, so there is no SMTP to configure
 - No calendar or Gantt view; dates live on cards and in **My work**
 - No time tracking, sprints or story points
+- Card hierarchy is one parent per card, on the same board — not a cross-board tree
 - No mobile apps — the web UI is responsive and works on a phone browser
 - No SSO / LDAP; accounts are created by an administrator in the admin panel
 

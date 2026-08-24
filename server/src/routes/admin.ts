@@ -41,6 +41,18 @@ adminRouter.get('/users', requirePermission('users.manage'), async (_req, res) =
   res.json({ users });
 });
 
+const LEGACY_TIER_KEYS: Record<string, string> = {
+  ADMIN: 'administrator',
+  MEMBER: 'member',
+  GUEST: 'guest',
+};
+
+/** Older clients still send the flat `role` tier instead of a roleId. */
+async function roleFromLegacyTier(tier?: string) {
+  const key = tier ? LEGACY_TIER_KEYS[tier] : undefined;
+  return key ? prisma.role.findUnique({ where: { key } }) : null;
+}
+
 adminRouter.post('/users', requirePermission('users.manage'), async (req, res) => {
   const parsed = z
     .object({
@@ -48,6 +60,7 @@ adminRouter.post('/users', requirePermission('users.manage'), async (req, res) =
       name: z.string().min(1).max(80),
       password: z.string().min(6),
       roleId: z.string().optional(),
+      role: z.enum(['ADMIN', 'MEMBER', 'GUEST']).optional(),
       title: z.string().max(120).optional(),
       avatarColor: z.string().max(32).optional(),
       mustChangePw: z.boolean().optional(),
@@ -62,7 +75,8 @@ adminRouter.post('/users', requirePermission('users.manage'), async (req, res) =
 
   const role = parsed.data.roleId
     ? await prisma.role.findUnique({ where: { id: parsed.data.roleId } })
-    : await prisma.role.findUnique({ where: { key: 'member' } });
+    : (await roleFromLegacyTier(parsed.data.role)) ??
+      (await prisma.role.findUnique({ where: { key: 'member' } }));
   if (!role) return res.status(400).json({ error: 'That role no longer exists' });
 
   const palette = ['#6366f1', '#ec4899', '#f97316', '#10b981', '#0ea5e9', '#8b5cf6', '#f43f5e', '#14b8a6'];
@@ -88,6 +102,7 @@ adminRouter.patch('/users/:id', requirePermission('users.manage'), async (req, r
       name: z.string().min(1).max(80).optional(),
       email: z.string().email().optional(),
       roleId: z.string().optional(),
+      role: z.enum(['ADMIN', 'MEMBER', 'GUEST']).optional(),
       isActive: z.boolean().optional(),
       title: z.string().max(120).nullable().optional(),
       avatarColor: z.string().max(32).optional(),
@@ -107,6 +122,9 @@ adminRouter.patch('/users/:id', requirePermission('users.manage'), async (req, r
   if (parsed.data.roleId && parsed.data.roleId !== target.roleId) {
     nextRole = await prisma.role.findUnique({ where: { id: parsed.data.roleId } });
     if (!nextRole) return res.status(400).json({ error: 'That role no longer exists' });
+  } else if (!parsed.data.roleId && parsed.data.role && parsed.data.role !== target.role) {
+    nextRole = await roleFromLegacyTier(parsed.data.role);
+    if (!nextRole) return res.status(400).json({ error: 'That role no longer exists' });
   }
 
   const willAdmin =
@@ -122,6 +140,7 @@ adminRouter.patch('/users/:id', requirePermission('users.manage'), async (req, r
   }
 
   const data: any = { ...parsed.data };
+  delete data.role; // derived from the role record below
   if (data.email) data.email = data.email.trim().toLowerCase();
   if (nextRole) {
     data.roleId = nextRole.id;

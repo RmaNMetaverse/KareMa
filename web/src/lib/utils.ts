@@ -81,6 +81,7 @@ export function renderRichText(input: string): string {
       .replace(/"/g, '&quot;');
 
   const blocks: string[] = [];
+  const links: string[] = [];
   let text = esc(input);
 
   // fenced code first, stashed so nothing else touches it
@@ -95,6 +96,11 @@ export function renderRichText(input: string): string {
     .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
     .replace(/(^|[\s(])\*([^*\n]+)\*/g, '$1<em>$2</em>')
     .replace(/~~([^~\n]+)~~/g, '<del>$1</del>')
+    // [label](url) — stashed so the bare-url linker below cannot chew the href
+    .replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, (_m, label, href) => {
+      links.push(`<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`);
+      return `KMLINK${links.length - 1}KMLINK`;
+    })
     .replace(
       /(https?:\/\/[^\s<]+)/g,
       '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
@@ -168,7 +174,8 @@ export function renderRichText(input: string): string {
 
   return out
     .join('\n')
-    .replace(/KMCODE(\d+)KMCODE/g, (_m, i) => blocks[Number(i)]);
+    .replace(/KMCODE(\d+)KMCODE/g, (_m, i) => blocks[Number(i)])
+    .replace(/KMLINK(\d+)KMLINK/g, (_m, i) => links[Number(i)]);
 }
 
 /** Strip mention syntax down to plain "@Name" for previews. */

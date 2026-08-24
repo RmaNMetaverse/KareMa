@@ -187,7 +187,7 @@ export function BoardListView({
         <div className="overflow-x-auto">
           <table className="w-full min-w-[46rem] text-sm">
             <thead>
-              <tr className="border-b border-line/70 text-left text-[11px] uppercase tracking-wide text-muted">
+              <tr className="border-b border-line/70 text-left text-[11px] tracking-wide text-muted">
                 {COLUMNS.map((col) => (
                   <th key={col.key} className={cn('px-3 py-2.5 font-semibold', col.className)}>
                     <button
