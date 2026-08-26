@@ -203,18 +203,39 @@ sudo sed -i 's|127.0.0.1:8080|127.0.0.1:8090|' /etc/nginx/snippets/karema.conf
 
 ### 5d. Include it from the existing site
 
-Find the server block that answers on port 80:
+nginx handles a request in two stages: a `server { }` block claims an address and port,
+and the `location` blocks inside it match URL paths. Only one server block answers port
+80 for a given address — the one already serving your other app — so KareMa's location
+has to live inside *that* block, beside the other app's `location /`. The `include` line
+pastes it there while keeping the rules in their own file.
+
+Find the file holding that block. `nginx -T` prints every configuration file nginx
+actually loaded, each preceded by its path:
 
 ```bash
-grep -rl "listen.*80" /etc/nginx/sites-enabled/ /etc/nginx/conf.d/ 2>/dev/null
+sudo nginx -T 2>/dev/null | grep -E "^# configuration file|listen|server_name"
 ```
 
-Open that file and add **one line** inside its `server { ... }` block, anywhere among
-the other `location` blocks:
+The file named just above a `listen 80` line is the one to edit. On a stock Ubuntu box
+that is `/etc/nginx/sites-available/default`, but any name is possible.
+
+> Do not go looking with `grep -r` in `/etc/nginx/sites-enabled/` — that directory holds
+> symlinks, and `grep -r` skips symlinks it meets while recursing, so it finds nothing
+> even when the site is right there. Use `nginx -T`, or `grep -R`.
+
+Back the file up before touching it:
+
+```bash
+sudo cp /etc/nginx/sites-available/<that-file> /etc/nginx/sites-available/<that-file>.bak-$(date +%F)
+```
+
+Then add **one line** inside its `server { ... }` block. Position within the block does
+not matter — nginx matches locations by specificity, not by order:
 
 ```nginx
 server {
-    listen 80;
+    listen 80 default_server;
+    listen [::]:80 default_server;
     server_name _;
 
     include /etc/nginx/snippets/karema.conf;   # <- the only edit
@@ -224,6 +245,9 @@ server {
     }
 }
 ```
+
+If `nginx -t` fails in the next step, nothing has been applied yet — restore the backup
+you just made and check the error before reloading.
 
 ### 5e. Test and reload
 
