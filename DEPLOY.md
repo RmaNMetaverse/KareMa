@@ -144,6 +144,12 @@ Generate the secret with:
 openssl rand -base64 48
 ```
 
+> **Single-quote any value containing a `$`.** In a `.env` file Docker Compose reads
+> `$e` as a variable reference and substitutes it away, so `M0$e$2034` reaches the
+> container as `M0$2034`. Written as `'M0$e$2034'` it arrives intact. This bites
+> hardest on `POSTGRES_PASSWORD`, because the database volume gets initialised with
+> the mangled value.
+
 > `BASE_PATH` is compiled into the frontend bundle, so changing it later needs a
 > rebuild (`docker compose up -d --build web`). It is not a runtime switch.
 
@@ -460,6 +466,25 @@ sudo nginx -T | grep karema_conn_upgrade
 **Large attachments fail near the end of the upload.**
 Raise `client_max_body_size` in `/etc/nginx/snippets/karema.conf` and `MAX_UPLOAD_MB` in
 `.env`, then reload nginx and run `docker compose up -d`.
+
+**You cannot sign in with the `ADMIN_EMAIL` / `ADMIN_PASSWORD` you set.**
+The first administrator is created only when the database is empty, so if you
+started KareMa once before editing `.env`, the account was made from the old values
+and later edits do nothing. Check what exists:
+
+```bash
+docker exec karema-db psql -U karema -d karema -c 'select email, name from "User";'
+```
+
+Either sign in with those credentials and change them in Settings, or — if there is
+nothing to lose yet — wipe and start over:
+
+```bash
+cd /opt/karema && docker compose down -v && ./karema.sh start
+```
+
+`down -v` destroys the database and attachments. Also confirm no password in `.env`
+contains an unquoted `$` (see Step 3).
 
 **`nginx -t` fails with "duplicate map".**
 Something else already defines the same variable. The shipped map uses
