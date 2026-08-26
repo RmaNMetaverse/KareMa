@@ -278,6 +278,15 @@ function Appearance() {
             onChange={(aurora) => setPrefs({ aurora })}
           />
 
+          <Slider
+            label="Board picture blur"
+            min={0}
+            max={60}
+            value={prefs.boardBlur}
+            display={prefs.boardBlur === 0 ? 'Sharp' : `${prefs.boardBlur}px`}
+            onChange={(boardBlur) => setPrefs({ boardBlur })}
+          />
+
           <Switch
             checked={prefs.motion}
             onChange={(motion) => setPrefs({ motion })}

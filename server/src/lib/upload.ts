@@ -26,7 +26,8 @@ export const uploadImage = multer({
   limits: { fileSize: 8 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (file.mimetype.startsWith('image/')) cb(null, true);
-    else cb(new Error('Only image files are allowed here'));
+    // tagged so the error handler reports it as a bad request, not a crash
+    else cb(Object.assign(new Error('Only image files are allowed here'), { status: 400 }));
   },
 });
 

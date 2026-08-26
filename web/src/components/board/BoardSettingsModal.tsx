@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
-import { Palette, Plus, Settings2, Tag, Trash2, Users, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Image as ImageIcon, Palette, Plus, Settings2, Tag, Trash2, Upload, Users, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { del, get, patch, post } from '../../lib/api';
+import { del, get, patch, post, uploadBoardBackground } from '../../lib/api';
 import { useApp } from '../../store/app';
 import { BOARD_ICONS, cn } from '../../lib/utils';
+import { withBase } from '../../lib/base';
 import { PRESET_PRIMARIES } from '../../lib/theme';
-import { Avatar, ConfirmDialog, Field, Modal, ModalHeader, Switch } from '../ui';
+import { Avatar, ConfirmDialog, Field, Modal, ModalHeader, Spinner, Switch } from '../ui';
 
 const TABS = [
   { id: 'general', label: 'General', icon: <Settings2 size={15} /> },
@@ -35,6 +36,9 @@ export function BoardSettingsModal({
   const [directory, setDirectory] = useState<any[]>([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [newLabel, setNewLabel] = useState({ name: '', color: '#6366f1' });
+  const [background, setBackground] = useState<string | null>(board.background ?? null);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     get<{ users: any[] }>('/api/users')
@@ -138,6 +142,82 @@ export function BoardSettingsModal({
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div>
+              <p className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted">
+                <ImageIcon size={13} /> Background picture
+              </p>
+              <div className="flex items-center gap-3">
+                <div
+                  className="h-16 w-28 shrink-0 overflow-hidden rounded-md border border-line bg-surface2/60 bg-cover bg-center"
+                  style={
+                    background
+                      ? { backgroundImage: `url("${withBase(background)}")` }
+                      : undefined
+                  }
+                >
+                  {!background && (
+                    <span className="grid h-full w-full place-items-center text-[11px] text-muted">
+                      None
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = '';
+                      if (!file) return;
+                      setUploading(true);
+                      try {
+                        const res = await uploadBoardBackground(board.id, file);
+                        setBackground(res.board.background);
+                        toast({ title: 'Background updated', tone: 'success' });
+                        onChanged();
+                      } catch (err: any) {
+                        toast({ title: err.message, tone: 'error' });
+                      } finally {
+                        setUploading(false);
+                      }
+                    }}
+                  />
+                  <button
+                    className="btn btn-subtle py-1.5 text-xs"
+                    disabled={uploading}
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    {uploading ? <Spinner size={13} /> : <Upload size={13} />}
+                    {background ? 'Replace' : 'Upload'}
+                  </button>
+                  {background && (
+                    <button
+                      className="btn btn-subtle py-1.5 text-xs text-muted hover:text-danger"
+                      disabled={uploading}
+                      onClick={async () => {
+                        try {
+                          await del(`/api/boards/${board.id}/background`);
+                          setBackground(null);
+                          toast({ title: 'Background removed', tone: 'info' });
+                          onChanged();
+                        } catch (err: any) {
+                          toast({ title: err.message, tone: 'error' });
+                        }
+                      }}
+                    >
+                      <Trash2 size={13} /> Remove
+                    </button>
+                  )}
+                </div>
+              </div>
+              <p className="mt-1.5 text-[11px] text-muted">
+                Shown blurred behind the lists. Tune how soft it looks in Settings &rarr;
+                Appearance.
+              </p>
             </div>
 
             <div className="rounded-md bg-surface2/60 p-3">

@@ -107,6 +107,17 @@ export async function uploadFile(
   });
 }
 
+/** Upload a board background picture. Returns the updated board. */
+export async function uploadBoardBackground(boardId: string, file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  return api<{ board: any }>(`/api/boards/${boardId}/background`, {
+    method: 'POST',
+    body: form,
+    raw: true,
+  });
+}
+
 /** Upload a profile picture. Returns the refreshed user. */
 export async function uploadAvatar(file: File) {
   const form = new FormData();

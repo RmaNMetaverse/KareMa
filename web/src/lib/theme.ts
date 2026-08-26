@@ -14,6 +14,7 @@ export type Prefs = {
   fontScale: number; // 0.9..1.15
   motion: boolean;
   aurora: number; // 0..1 ambient background strength
+  boardBlur: number; // px, applied to a board's background picture
   sidebarCollapsed: boolean;
 };
 
@@ -30,6 +31,7 @@ export const DEFAULT_PREFS: Prefs = {
   fontScale: 1,
   motion: true,
   aurora: 0.5,
+  boardBlur: 24,
   sidebarCollapsed: false,
 };
 
@@ -172,6 +174,7 @@ export function applyPrefs(prefs: Prefs) {
   root.style.setProperty('--glass-blur', `${prefs.glassBlur}px`);
   root.style.setProperty('--glass-sheen', String(prefs.glassSheen));
   root.style.setProperty('--aurora-strength', String(prefs.aurora));
+  root.style.setProperty('--board-blur', `${prefs.boardBlur}px`);
 
   // Glass alpha is theme-dependent: dark themes need a lower alpha to read well.
   const base = mode === 'light' || mode === 'warm' ? 0.1 : 0;

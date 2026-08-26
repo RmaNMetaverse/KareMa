@@ -1308,6 +1308,8 @@ function describeActivity(a: any) {
       return `made this a subtask of "${d.parent}"`;
     case 'card.parent.cleared':
       return 'detached this from its parent';
+    case 'board.background.set':
+      return 'changed the board background';
     default:
       return a.type;
   }

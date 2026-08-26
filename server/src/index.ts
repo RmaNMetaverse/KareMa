@@ -55,6 +55,9 @@ app.use('/api/search', searchRouter);
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (err?.code === 'LIMIT_FILE_SIZE')
     return res.status(413).json({ error: `File is larger than the ${env.maxUploadMb} MB limit` });
+  // rejections we raised on purpose, e.g. a non-image sent to an image-only route
+  if (err?.status >= 400 && err?.status < 500)
+    return res.status(err.status).json({ error: err.message });
   console.error('[karema]', err);
   res.status(500).json({ error: 'Something went wrong on the server' });
 });

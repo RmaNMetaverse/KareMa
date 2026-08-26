@@ -34,6 +34,7 @@ import { del, get, patch, post } from '../lib/api';
 import { getSocket } from '../lib/socket';
 import { useApp } from '../store/app';
 import { cn, PRIORITIES } from '../lib/utils';
+import { withBase } from '../lib/base';
 import { Avatar, ConfirmDialog, MenuItem, Popover, Spinner } from '../components/ui';
 import { CardData, CardTileGhost } from '../components/board/CardTile';
 import { ListColumn, ListData } from '../components/board/ListColumn';
@@ -52,6 +53,7 @@ type BoardData = {
   title: string;
   description?: string | null;
   color: string;
+  background?: string | null;
   icon?: string | null;
   isPublic: boolean;
   starred: boolean;
@@ -476,7 +478,25 @@ export function BoardPage() {
   const canEdit = board.canEdit;
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] flex-col">
+    <div className="relative isolate flex h-[calc(100vh-3.5rem)] flex-col">
+      {/* --------------------------------------------------- background picture */}
+      {board.background && (
+        <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+          <div
+            className="absolute inset-0 bg-cover bg-center"
+            style={{
+              backgroundImage: `url("${withBase(board.background)}")`,
+              // a blur samples from beyond the element, so the layer is grown
+              // past its box to stop the edges fading out
+              filter: 'blur(var(--board-blur, 24px))',
+              transform: 'scale(1.15)',
+            }}
+          />
+          {/* keeps list and card text readable over any photo */}
+          <div className="absolute inset-0 bg-bg/60" />
+        </div>
+      )}
+
       {/* ------------------------------------------------------- board header */}
       <div className="glass flex flex-wrap items-center gap-2 border-b px-4 py-2.5">
         <span

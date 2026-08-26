@@ -171,6 +171,10 @@ and it follows your account to whatever machine you sign in from.
 - **Shape and size.** Corner radius, interface density (compact / cozy / roomy), text
   size, ambient background strength, and an animations toggle for anyone who would
   rather things held still.
+- **A picture behind your board.** Give any board a background image from its settings.
+  It renders blurred behind the lists so a busy photo still leaves the cards readable,
+  and how soft it looks is a slider here — sharp at 0, fully diffused at 60. The picture
+  belongs to the board and is shared; the blur is yours alone.
 - **Seven presets** to start from: Nebula, Daylight, Amber Desk, Midnight, Forest,
   Sunset and Paper.
 

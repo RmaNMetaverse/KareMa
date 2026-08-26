@@ -7,6 +7,7 @@ import { publicUser, cardInclude } from '../lib/selects';
 import { emitBoard } from '../lib/realtime';
 import { logActivity, notify } from '../lib/notify';
 import { listPosition } from '../lib/position';
+import { uploadImage, removeStoredFile, storedNameFromUrl } from '../lib/upload';
 
 export const boardsRouter = Router();
 boardsRouter.use(requireAuth);
@@ -165,6 +166,54 @@ boardsRouter.patch('/:id', async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: 'Invalid board data' });
 
   const board = await prisma.board.update({ where: { id: req.params.id }, data: parsed.data });
+  emitBoard(board.id, 'board:updated', board);
+  res.json({ board });
+});
+
+/* ------------------------------------------------------------ background */
+
+/**
+ * Set the board's background picture. It is rendered blurred behind the lists,
+ * so a busy photo still works; how blurred is a per-viewer appearance setting.
+ */
+boardsRouter.post('/:id/background', uploadImage.single('file'), async (req, res) => {
+  const access = await getBoardAccess(req.user!, req.params.id);
+  if (!access?.canManage) {
+    // multer has already written the file, so do not leave it behind
+    removeStoredFile(req.file?.filename);
+    return res.status(403).json({ error: 'You cannot edit this board' });
+  }
+  if (!req.file) return res.status(400).json({ error: 'No image was uploaded' });
+
+  const current = await prisma.board.findUnique({
+    where: { id: req.params.id },
+    select: { background: true },
+  });
+  const board = await prisma.board.update({
+    where: { id: req.params.id },
+    data: { background: `/api/files/${req.file.filename}` },
+  });
+
+  removeStoredFile(storedNameFromUrl(current?.background));
+  await logActivity(board.id, req.user!.id, 'board.background.set', {});
+  emitBoard(board.id, 'board:updated', board);
+  res.json({ board });
+});
+
+boardsRouter.delete('/:id/background', async (req, res) => {
+  const access = await getBoardAccess(req.user!, req.params.id);
+  if (!access?.canManage) return res.status(403).json({ error: 'You cannot edit this board' });
+
+  const current = await prisma.board.findUnique({
+    where: { id: req.params.id },
+    select: { background: true },
+  });
+  const board = await prisma.board.update({
+    where: { id: req.params.id },
+    data: { background: null },
+  });
+
+  removeStoredFile(storedNameFromUrl(current?.background));
   emitBoard(board.id, 'board:updated', board);
   res.json({ board });
 });
