@@ -57,8 +57,8 @@ export function BoardCreateModal({
     // The board exists from here on. Close first, so that anything the parent
     // does next -- reloading a list, navigating -- cannot strand this modal
     // open and make a successful create look like a failure.
-    toast({ title: 'Board created', tone: 'success' });
     onClose();
+    toast({ title: 'Board created', tone: 'success' });
     if (created) onCreated(created);
   };
 

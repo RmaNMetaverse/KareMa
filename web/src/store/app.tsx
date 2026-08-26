@@ -64,6 +64,18 @@ type AppState = {
 
 const Ctx = createContext<AppState | null>(null);
 
+let toastSeq = 0;
+/**
+ * crypto.randomUUID() only exists in a secure context. KareMa is commonly served
+ * over plain http on a LAN address, where it is undefined and throws -- which used
+ * to take down whatever called toast(), leaving modals open on a successful save.
+ * These ids only need to be unique within one tab.
+ */
+function nextToastId() {
+  toastSeq += 1;
+  return `t${Date.now().toString(36)}-${toastSeq.toString(36)}`;
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -108,8 +120,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const toast = useCallback((t: ToastInput | string) => {
     const item: Toast =
       typeof t === 'string'
-        ? { id: crypto.randomUUID(), title: t, tone: 'default' }
-        : { tone: 'default', ...t, id: crypto.randomUUID() };
+        ? { id: nextToastId(), title: t, tone: 'default' }
+        : { tone: 'default', ...t, id: nextToastId() };
     setToasts((prev) => [...prev.slice(-3), item]);
     setTimeout(() => setToasts((prev) => prev.filter((x) => x.id !== item.id)), 4200);
   }, []);
