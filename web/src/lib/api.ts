@@ -26,6 +26,10 @@ export async function api<T = any>(path: string, options: Options = {}): Promise
 
   const init: RequestInit = {
     credentials: 'include',
+    // Always go to the server. Without this a proxy can answer a revalidation
+    // with a 304, which arrives here as a non-ok response and looks like a
+    // failure rather than "your data is unchanged".
+    cache: 'no-store',
     ...rest,
     headers: {
       ...(raw ? {} : { 'Content-Type': 'application/json' }),

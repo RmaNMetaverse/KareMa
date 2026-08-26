@@ -170,5 +170,6 @@ filesRouter.get('/:name', requireAuth, (req, res) => {
   const name = path.basename(req.params.name);
   const full = path.join(env.uploadDir, name);
   if (!fs.existsSync(full)) return res.status(404).json({ error: 'File not found' });
-  res.sendFile(full);
+  // the Cache-Control set in index.ts is correct for these; don't let send() replace it
+  res.sendFile(full, { cacheControl: false });
 });

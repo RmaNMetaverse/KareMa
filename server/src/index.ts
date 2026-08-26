@@ -25,6 +25,17 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '2mb' }));
 app.use(cookieParser());
 
+// Nothing behind /api may be cached by a browser or a proxy in front of us:
+// the payloads are per-user and change on every write. Stored files are the
+// exception -- their names are unique per upload, so they never change.
+app.use('/api', (req, res, next) => {
+  res.set(
+    'Cache-Control',
+    req.path.startsWith('/files/') ? 'private, max-age=31536000, immutable' : 'no-store'
+  );
+  next();
+});
+
 app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'karema', version: '1.0.0' }));
 
 app.use('/api/auth', authRouter);

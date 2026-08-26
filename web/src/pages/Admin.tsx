@@ -163,6 +163,10 @@ function UsersTab() {
     try {
       const res = await get<{ users: any[] }>('/api/admin/users');
       setUsers(res.users);
+    } catch (err: any) {
+      // Without this the list silently keeps showing whatever it had before,
+      // which reads as "creating the user did nothing".
+      toast({ title: `Could not refresh the list: ${err.message}`, tone: 'error' });
     } finally {
       setLoading(false);
     }
