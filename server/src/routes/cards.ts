@@ -113,6 +113,34 @@ cardsRouter.get('/:id', async (req, res) => {
 });
 
 /** Update card fields. */
+/**
+ * Every live card beneath this one, nearest first.
+ *
+ * A sub-task is part of its parent's work rather than a card that merely
+ * points at it, so the two travel together: colour and priority flow down,
+ * and moving a parent to another list takes its children along.
+ */
+async function descendants(rootId: string) {
+  const found: { id: string; listId: string }[] = [];
+  const seen = new Set<string>([rootId]);
+  let frontier = [rootId];
+
+  // depth is capped because parentId is user-supplied; the cycle check on
+  // /:id/parent should make that impossible, but this must not hang either way
+  for (let depth = 0; depth < 25 && frontier.length; depth++) {
+    const children = await prisma.card.findMany({
+      where: { parentId: { in: frontier }, isArchived: false },
+      orderBy: { position: 'asc' },
+      select: { id: true, listId: true },
+    });
+    const next = children.filter((c) => !seen.has(c.id));
+    next.forEach((c) => seen.add(c.id));
+    found.push(...next);
+    frontier = next.map((c) => c.id);
+  }
+  return found;
+}
+
 cardsRouter.patch('/:id', async (req, res) => {
   const { card, access } = await cardAccess(req, req.params.id);
   if (!card) return res.status(404).json({ error: 'Card not found' });
@@ -141,6 +169,25 @@ cardsRouter.patch('/:id', async (req, res) => {
 
   await prisma.card.update({ where: { id: card.id }, data });
   const updated = await fullCard(card.id);
+
+  // Colour and priority describe the whole group, so they flow down to every
+  // sub-task. Anything else stays personal to the card it was set on.
+  const inherited: { color?: string | null; priority?: any } = {};
+  if (parsed.data.color !== undefined) inherited.color = parsed.data.color;
+  if (parsed.data.priority !== undefined) inherited.priority = parsed.data.priority;
+
+  if (Object.keys(inherited).length) {
+    const kids = await descendants(card.id);
+    if (kids.length) {
+      await prisma.card.updateMany({
+        where: { id: { in: kids.map((k) => k.id) } },
+        data: inherited,
+      });
+      for (const kid of kids) {
+        emitBoard(card.boardId, 'card:updated', await fullCard(kid.id));
+      }
+    }
+  }
 
   if (parsed.data.isComplete !== undefined) {
     await logActivity(
@@ -190,6 +237,20 @@ cardsRouter.patch('/:id/move', async (req, res) => {
   });
   const updated = await fullCard(card.id);
 
+  // Sub-tasks follow their parent, landing directly beneath it so the group
+  // stays contiguous in the new list.
+  const movedKids: { card: any; fromListId: string }[] = [];
+  let slot = parsed.data.index + 1;
+  for (const kid of await descendants(card.id)) {
+    const kidPosition = await cardPosition(target.id, slot, kid.id);
+    await prisma.card.update({
+      where: { id: kid.id },
+      data: { listId: target.id, position: kidPosition },
+    });
+    movedKids.push({ card: await fullCard(kid.id), fromListId: kid.listId });
+    slot += 1;
+  }
+
   if (target.id !== card.listId) {
     const from = await prisma.list.findUnique({ where: { id: card.listId }, select: { title: true } });
     await logActivity(
@@ -215,6 +276,14 @@ cardsRouter.patch('/:id/move', async (req, res) => {
     fromListId: card.listId,
     toListId: target.id,
   });
+  // after the parent, so a client applies the group in the order it reads
+  for (const kid of movedKids) {
+    emitBoard(card.boardId, 'card:moved', {
+      card: kid.card,
+      fromListId: kid.fromListId,
+      toListId: target.id,
+    });
+  }
   res.json({ card: updated });
 });
 
@@ -588,6 +657,10 @@ cardsRouter.post('/:id/subtasks', async (req, res) => {
       position: await cardPosition(listId, siblings),
       number: boardCards + 1,
       parentId: card.id,
+      // start life matching the parent, the same way a later change to the
+      // parent's colour or priority will flow down to it
+      color: card.color,
+      priority: card.priority,
       createdById: req.user!.id,
       watchers: { create: { userId: req.user!.id } },
     },

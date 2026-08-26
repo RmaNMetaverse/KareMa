@@ -787,6 +787,14 @@ function Checklist({
 }) {
   const [adding, setAdding] = useState(false);
 
+  const toggle = async (item: any) => {
+    if (!canEdit) return;
+    const res = await patch<{ card: any }>(`/api/cards/${cardId}/checklist-items/${item.id}`, {
+      isDone: !item.isDone,
+    });
+    onChanged(res.card);
+  };
+
   return (
     <div>
       <div className="flex items-center gap-2">
@@ -809,22 +817,36 @@ function Checklist({
         {checklist.items.map((item: any) => (
           <li key={item.id} className="group flex items-center gap-2.5 rounded-sm px-1 py-1 hover:bg-surface2/60">
             <button
+              type="button"
+              role="checkbox"
+              aria-checked={item.isDone}
+              aria-label={item.text}
               disabled={!canEdit}
-              onClick={async () => {
-                const res = await patch<{ card: any }>(
-                  `/api/cards/${cardId}/checklist-items/${item.id}`,
-                  { isDone: !item.isDone }
-                );
-                onChanged(res.card);
-              }}
+              onClick={() => toggle(item)}
               className={cn(
-                'grid h-4 w-4 shrink-0 place-items-center rounded-xs border-2 transition-colors',
-                item.isDone ? 'border-success bg-success text-white' : 'border-line hover:border-success'
+                // border-line is far too faint against the card panel to read as a
+                // control, so an empty box looked like no box at all
+                'grid h-[18px] w-[18px] shrink-0 place-items-center rounded-xs border-2 transition-colors',
+                item.isDone
+                  ? 'border-success bg-success text-white'
+                  : 'border-muted bg-surface3/50 text-transparent',
+                canEdit &&
+                  !item.isDone &&
+                  'hover:border-success hover:bg-success/15 hover:text-success/70',
+                !canEdit && 'cursor-default opacity-70'
               )}
             >
-              {item.isDone && <Check size={10} strokeWidth={3} />}
+              {/* always rendered, so hovering an empty box previews the tick */}
+              <Check size={12} strokeWidth={3} />
             </button>
-            <span className={cn('flex-1 text-[13px]', item.isDone && 'text-muted line-through')}>
+            <span
+              onClick={() => toggle(item)}
+              className={cn(
+                'flex-1 text-[13px]',
+                canEdit && 'cursor-pointer',
+                item.isDone && 'text-muted line-through'
+              )}
+            >
               {item.text}
             </span>
             {canEdit && (
