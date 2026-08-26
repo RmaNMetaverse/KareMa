@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { del, get, patch, post, uploadFile } from '../../lib/api';
 import { useApp } from '../../store/app';
+import { withBase } from '../../lib/base';
 import { getSocket } from '../../lib/socket';
 import {
   CARD_COLORS,
@@ -200,7 +201,7 @@ export function CardModal({ cardId, board, onClose, onChanged, onOpenCard }: Pro
               style={
                 card.coverType === 'image'
                   ? {
-                      backgroundImage: `url(${card.coverValue})`,
+                      backgroundImage: `url(${withBase(card.coverValue)})`,
                       backgroundSize: 'cover',
                       backgroundPosition: 'center',
                     }
@@ -881,7 +882,8 @@ function Attachment({
   onSetCover: () => void;
   onDelete: () => void;
 }) {
-  const href = attachment.kind === 'link' ? attachment.url : `/api/files/${attachment.storedName}`;
+  const href =
+    attachment.kind === 'link' ? attachment.url : withBase(`/api/files/${attachment.storedName}`);
 
   return (
     <div className="glass group overflow-hidden rounded-lg">
@@ -1216,7 +1218,7 @@ function CoverPicker({
                   className="h-14 overflow-hidden rounded-sm"
                 >
                   <img
-                    src={`/api/files/${a.storedName}`}
+                    src={withBase(`/api/files/${a.storedName}`)}
                     alt=""
                     className="h-full w-full object-cover"
                   />

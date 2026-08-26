@@ -14,6 +14,7 @@ import {
 import { del, patch, post, uploadFile } from '../../lib/api';
 import { useApp } from '../../store/app';
 import { cn, formatBytes, renderRichText, timeAgo } from '../../lib/utils';
+import { withBase } from '../../lib/base';
 import { Avatar, Spinner } from '../ui';
 import { MentionUser } from './MentionInput';
 import { RichTextEditor } from './RichTextEditor';
@@ -47,7 +48,7 @@ const KIND_ICON: Record<string, React.ReactNode> = {
 };
 
 export function attachmentHref(a: AttachmentData) {
-  return a.kind === 'link' ? a.url ?? '#' : `/api/files/${a.storedName}`;
+  return a.kind === 'link' ? a.url ?? '#' : withBase(`/api/files/${a.storedName}`);
 }
 
 /* ------------------------------------------------------ attachments on a comment */

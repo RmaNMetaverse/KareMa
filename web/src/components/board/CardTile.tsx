@@ -10,6 +10,7 @@ import {
   Paperclip,
 } from 'lucide-react';
 import { cn, dueState, formatDate, initials, PRIORITIES } from '../../lib/utils';
+import { withBase } from '../../lib/base';
 
 export type CardData = {
   id: string;
@@ -108,7 +109,7 @@ export function CardTile({
           style={
             card.coverType === 'image'
               ? {
-                  backgroundImage: `url(${card.coverValue})`,
+                  backgroundImage: `url(${withBase(card.coverValue)})`,
                   backgroundSize: 'cover',
                   backgroundPosition: 'center',
                 }
@@ -121,7 +122,9 @@ export function CardTile({
         <div
           className="relative flex min-h-[6.5rem] items-end p-2.5"
           style={{
-            backgroundImage: `linear-gradient(to top, rgba(0,0,0,.75), rgba(0,0,0,.15)), url(${card.coverValue})`,
+            backgroundImage: `linear-gradient(to top, rgba(0,0,0,.75), rgba(0,0,0,.15)), url(${withBase(
+              card.coverValue
+            )})`,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
           }}
@@ -242,7 +245,11 @@ export function CardTile({
                   className="grid h-6 w-6 place-items-center rounded-full text-[10px] font-semibold text-white ring-2 ring-surface"
                 >
                   {user.avatarUrl ? (
-                    <img src={user.avatarUrl} className="h-full w-full rounded-full object-cover" alt="" />
+                    <img
+                      src={withBase(user.avatarUrl)}
+                      className="h-full w-full rounded-full object-cover"
+                      alt=""
+                    />
                   ) : (
                     initials(user.name)
                   )}

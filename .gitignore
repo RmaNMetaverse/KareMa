@@ -41,3 +41,6 @@ desktop.ini
 
 # prisma generated client
 server/node_modules/.prisma/
+
+# typescript incremental build info
+*.tsbuildinfo

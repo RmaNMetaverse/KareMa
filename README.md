@@ -313,6 +313,16 @@ sudo ufw allow 8080/tcp
 **macOS** — allow incoming connections for Docker when the system prompts, or in
 System Settings → Network → Firewall → Options.
 
+### Behind a reverse proxy, or beside an existing site
+
+KareMa can live under a sub-path — `http://your-server/KareMa` — on a machine that
+already serves something else, without disturbing that application. Set `BASE_PATH`,
+bind the port to loopback, and point the host's nginx at it.
+
+**[DEPLOY.md](DEPLOY.md)** walks through it end to end on Ubuntu: the nginx snippets to
+drop in, why the existing site stays untouched, how to update after every push, and a
+Docker-free variant that uses the Node and nginx already on the box.
+
 ---
 
 ## Configuration
@@ -323,6 +333,8 @@ Everything lives in `.env`, next to `docker-compose.yml`. Change a value, then r
 | Setting | Default | Notes |
 | --- | --- | --- |
 | `KAREMA_PORT` | `8080` | The port you open in a browser |
+| `KAREMA_BIND` | `0.0.0.0` | Which host interface that port is published on. Set to `127.0.0.1` when a reverse proxy sits in front |
+| `BASE_PATH` | `/` | Where KareMa lives in the URL. `/KareMa/` serves it under a sub-path, see [DEPLOY.md](DEPLOY.md). Changing it needs `docker compose up -d --build web` |
 | `JWT_SECRET` | generated on first run | Changing it signs everyone out |
 | `ADMIN_EMAIL` | `admin@karema.local` | Only used to create the very first account |
 | `ADMIN_PASSWORD` | `admin1234` | Only used once; you are forced to change it at first sign-in |
@@ -331,7 +343,7 @@ Everything lives in `.env`, next to `docker-compose.yml`. Change a value, then r
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `karema` | The database is never exposed outside Docker |
 
 If you raise `MAX_UPLOAD_MB` above 512, also raise `client_max_body_size` in
-`web/nginx.conf`.
+`web/nginx.conf.template`.
 
 ---
 

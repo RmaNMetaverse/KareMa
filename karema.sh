@@ -60,6 +60,20 @@ port() {
   printf '%s' "${p:-8080}"
 }
 
+# The sub-path KareMa is mounted under, with no trailing slash.
+# "" for a normal install, "/KareMa" when BASE_PATH=/KareMa/ in .env.
+base_path() {
+  local b; b=$(grep -E '^BASE_PATH=' .env 2>/dev/null | cut -d= -f2 || true)
+  b=${b:-/}
+  b=${b%/}
+  printf '%s' "${b#/}" | sed 's|^|/|; s|^/$||'
+}
+
+# Where to reach this instance from the machine it runs on.
+local_url() {
+  printf 'http://localhost:%s%s' "$(port)" "$(base_path)"
+}
+
 open_browser() {
   local url="$1"
   if command -v open >/dev/null 2>&1; then open "$url" >/dev/null 2>&1 || true
@@ -68,10 +82,10 @@ open_browser() {
 }
 
 wait_for_api() {
-  local p="$1" i
+  local i
   say "Waiting for KareMa to come up..."
   for i in $(seq 1 40); do
-    if curl -fsS "http://localhost:${p}/api/health" >/dev/null 2>&1; then return 0; fi
+    if curl -fsS "$(local_url)/api/health" >/dev/null 2>&1; then return 0; fi
     sleep 3
   done
   return 1
@@ -85,17 +99,18 @@ cmd_start() {
   echo
   docker compose up -d --build
   echo
-  local p; p=$(port)
-  if wait_for_api "$p"; then
+  local p url; p=$(port); url=$(local_url)
+  if wait_for_api; then
     echo
     ok "KareMa is running."
     echo
-    say "${BOLD}Open${OFF}      http://localhost:${p}"
+    say "${BOLD}Open${OFF}      ${url}"
     say "${BOLD}Sign in${OFF}   with ADMIN_EMAIL / ADMIN_PASSWORD from .env"
     echo
-    say "${DIM}On your network, others reach it at http://$(hostname):${p}${OFF}"
+    say "${DIM}On your network, others reach it at http://$(hostname):${p}$(base_path)${OFF}"
+    say "${DIM}Behind a reverse proxy, use the address it publishes instead.${OFF}"
     echo
-    open_browser "http://localhost:${p}"
+    open_browser "$url"
   else
     warn "It did not answer in time. Check './karema.sh logs'."
   fi
@@ -110,7 +125,11 @@ cmd_update() {
   need_docker
   say "Rebuilding KareMa from the current source..."
   docker compose up -d --build
-  ok "Updated. The database and attachments were left untouched."
+  if wait_for_api; then
+    ok "Updated. The database and attachments were left untouched."
+  else
+    warn "Rebuilt, but the API did not answer in time. Check './karema.sh logs'."
+  fi
 }
 
 cmd_backup() {

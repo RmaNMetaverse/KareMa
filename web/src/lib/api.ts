@@ -1,3 +1,5 @@
+import { BASE } from './base';
+
 const TOKEN_KEY = 'karema.token';
 
 export function getToken() {
@@ -33,11 +35,12 @@ export async function api<T = any>(path: string, options: Options = {}): Promise
   };
   if (body !== undefined) init.body = raw ? (body as BodyInit) : JSON.stringify(body);
 
-  const res = await fetch(path.startsWith('/') ? path : `/api/${path}`, init);
+  const url = path.startsWith('/') ? path : `/api/${path}`;
+  const res = await fetch(`${BASE}${url}`, init);
 
   if (res.status === 401 && !path.includes('/auth/login')) {
     setToken(null);
-    if (!location.pathname.startsWith('/login')) location.href = '/login';
+    if (!location.pathname.startsWith(`${BASE}/login`)) location.href = `${BASE}/login`;
     throw new ApiError('Your session has expired', 401);
   }
 
@@ -77,7 +80,7 @@ export async function uploadFile(
     form.append('file', file);
 
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/api/attachments');
+    xhr.open('POST', `${BASE}/api/attachments`);
     xhr.withCredentials = true;
     const token = getToken();
     if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);

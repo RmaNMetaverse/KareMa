@@ -1,3 +1,5 @@
+# Generated at image build time from BASE_PATH.
+# __BASE__ is the sub-path without its trailing slash: "" at the root, "/KareMa" under one.
 server {
   listen 80;
   server_name _;
@@ -11,15 +13,20 @@ server {
   gzip_types text/css application/javascript application/json image/svg+xml;
   gzip_min_length 1024;
 
+  # "/KareMa" without the slash would otherwise fall through to a 404
+  location = __BASE__ { return 301 __BASE__/; } #base-redirect
+
   # hashed assets never change
-  location /assets/ {
+  location __BASE__/assets/ {
     expires 1y;
     add_header Cache-Control "public, immutable";
     try_files $uri =404;
   }
 
-  location /api/ {
-    proxy_pass http://api:4000;
+  # the trailing slash on proxy_pass strips the sub-path, so the API
+  # keeps seeing plain /api/... no matter where KareMa is mounted
+  location __BASE__/api/ {
+    proxy_pass http://api:4000/api/;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
@@ -30,8 +37,8 @@ server {
     proxy_request_buffering off;
   }
 
-  location /socket.io/ {
-    proxy_pass http://api:4000;
+  location __BASE__/socket.io/ {
+    proxy_pass http://api:4000/socket.io/;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
@@ -40,7 +47,7 @@ server {
   }
 
   # single-page app fallback
-  location / {
-    try_files $uri $uri/ /index.html;
+  location __BASE__/ {
+    try_files $uri $uri/ __BASE__/index.html;
   }
 }

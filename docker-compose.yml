@@ -47,12 +47,16 @@ services:
   web:
     build:
       context: ./web
+      args:
+        # "/" when KareMa owns the address, "/KareMa/" to mount it under a sub-path
+        BASE_PATH: ${BASE_PATH:-/}
     container_name: karema-web
     restart: unless-stopped
     depends_on:
       - api
     ports:
-      - "${KAREMA_PORT:-8080}:80"
+      # bind to 127.0.0.1 when a reverse proxy on the host is in front of this
+      - "${KAREMA_BIND:-0.0.0.0}:${KAREMA_PORT:-8080}:80"
 
 volumes:
   karema_db:

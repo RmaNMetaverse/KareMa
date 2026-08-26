@@ -1,12 +1,13 @@
 import { io, Socket } from 'socket.io-client';
 import { getToken } from './api';
+import { BASE } from './base';
 
 let socket: Socket | null = null;
 
 export function getSocket(): Socket {
   if (!socket) {
     socket = io({
-      path: '/socket.io',
+      path: `${BASE}/socket.io`,
       auth: { token: getToken() },
       withCredentials: true,
       transports: ['websocket', 'polling'],

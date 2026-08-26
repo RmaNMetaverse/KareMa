@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Check, X } from 'lucide-react';
 import { cn, initials } from '../lib/utils';
+import { withBase } from '../lib/base';
 
 /* ----------------------------------------------------------------- Avatar */
 
@@ -34,7 +35,7 @@ export function Avatar({
       )}
     >
       {user.avatarUrl ? (
-        <img src={user.avatarUrl} alt={user.name} className="h-full w-full object-cover" />
+        <img src={withBase(user.avatarUrl)} alt={user.name} className="h-full w-full object-cover" />
       ) : (
         initials(user.name)
       )}
