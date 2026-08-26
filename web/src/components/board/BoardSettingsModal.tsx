@@ -24,7 +24,7 @@ export function BoardSettingsModal({
   onClose: () => void;
   onChanged: () => void;
 }) {
-  const { toast, user } = useApp();
+  const { toast, user, refreshBoards } = useApp();
   const navigate = useNavigate();
   const [tab, setTab] = useState<(typeof TABS)[number]['id']>('general');
   const [title, setTitle] = useState(board.title);
@@ -331,6 +331,7 @@ export function BoardSettingsModal({
         onConfirm={async () => {
           await del(`/api/boards/${board.id}`);
           toast({ title: 'Board deleted', tone: 'success' });
+          refreshBoards();
           navigate('/');
         }}
       />

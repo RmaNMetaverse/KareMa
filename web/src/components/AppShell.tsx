@@ -34,7 +34,7 @@ type BoardSummary = {
 };
 
 export function AppShell() {
-  const { user, prefs, setPrefs, logout } = useApp();
+  const { user, prefs, setPrefs, logout, boardsStamp } = useApp();
   const [boards, setBoards] = useState<BoardSummary[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -51,7 +51,7 @@ export function AppShell() {
 
   useEffect(() => {
     loadBoards();
-  }, [location.pathname]);
+  }, [location.pathname, boardsStamp]);
 
   useEffect(() => {
     setMobileNav(false);

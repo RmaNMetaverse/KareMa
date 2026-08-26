@@ -161,7 +161,10 @@ export function Dashboard() {
       <BoardCreateModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        onCreated={(board) => navigate(`/b/${board.id}`)}
+        onCreated={(board) => {
+          load();
+          navigate(`/b/${board.id}`);
+        }}
       />
     </div>
   );

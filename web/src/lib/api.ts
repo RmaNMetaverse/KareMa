@@ -48,6 +48,11 @@ export async function api<T = any>(path: string, options: Options = {}): Promise
     throw new ApiError('Your session has expired', 401);
   }
 
+  // A proxy can answer a revalidation with 304 and an empty body. That is not
+  // a failure, but res.ok is false for it, so it has to be handled before the
+  // error check below or every caller sees a phantom error.
+  if (res.status === 304) return null as T;
+
   const text = await res.text();
   const data = text ? safeJson(text) : null;
 

@@ -33,6 +33,8 @@ app.use('/api', (req, res, next) => {
     'Cache-Control',
     req.path.startsWith('/files/') ? 'private, max-age=31536000, immutable' : 'no-store'
   );
+  // responses differ per signed-in user, so they must never be shared between them
+  res.set('Vary', 'Authorization');
   next();
 });
 

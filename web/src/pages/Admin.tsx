@@ -8,6 +8,7 @@ import {
   KeyRound,
   LayoutGrid,
   MessageSquare,
+  Pencil,
   Plus,
   Search,
   Shield,
@@ -451,12 +452,17 @@ function UserFormModal({
         });
         toast({ title: `${name} can now sign in`, tone: 'success' });
       }
-      onSaved();
     } catch (err: any) {
       toast({ title: err.message, tone: 'error' });
-    } finally {
       setSaving(false);
+      return;
     }
+    setSaving(false);
+
+    // The write succeeded. Hand back outside the try, so a failure while the
+    // parent refreshes its list cannot leave this modal open and make a saved
+    // user look unsaved.
+    onSaved();
   };
 
   return (
@@ -636,14 +642,69 @@ function PasswordResetModal({
 /* ----------------------------------------------------------------- boards */
 
 function BoardsTab() {
+  const { user, toast, refreshBoards } = useApp();
   const [boards, setBoards] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
+  const [deleting, setDeleting] = useState<any>(null);
+  const [busy, setBusy] = useState(false);
+
+  // The server grants both through these same two permissions, so a control
+  // only appears when the request behind it would actually be allowed.
+  const canRename = !!user?.permissions?.['boards.viewAll'];
+  const canDelete = !!user?.permissions?.['boards.deleteAny'];
+  const showActions = canRename || canDelete;
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await get<{ boards: any[] }>('/api/admin/boards');
+      setBoards(res.boards);
+    } catch (err: any) {
+      toast({ title: `Could not load the boards: ${err.message}`, tone: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    get<{ boards: any[] }>('/api/admin/boards')
-      .then((r) => setBoards(r.boards))
-      .finally(() => setLoading(false));
+    load();
   }, []);
+
+  const saveTitle = async () => {
+    if (!renaming || busy) return;
+    const next = renaming.title.trim();
+    const before = boards.find((b) => b.id === renaming.id)?.title;
+    if (!next || next === before) return setRenaming(null);
+
+    setBusy(true);
+    try {
+      await patch(`/api/boards/${renaming.id}`, { title: next });
+      setRenaming(null);
+      toast({ title: `Renamed to "${next}"`, tone: 'success' });
+      refreshBoards();
+      await load();
+    } catch (err: any) {
+      toast({ title: err.message, tone: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeBoard = async () => {
+    if (!deleting) return;
+    const name = deleting.title;
+    try {
+      await del(`/api/boards/${deleting.id}`);
+      setDeleting(null);
+      toast({ title: `"${name}" deleted`, tone: 'success' });
+      refreshBoards();
+      await load();
+    } catch (err: any) {
+      setDeleting(null);
+      toast({ title: err.message, tone: 'error' });
+    }
+  };
 
   if (loading) {
     return (
@@ -656,50 +717,134 @@ function BoardsTab() {
   }
 
   return (
-    <div className="glass overflow-hidden rounded-xl">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-line/70 text-left text-xs uppercase tracking-wide text-muted">
-            <th className="px-4 py-3 font-semibold">Board</th>
-            <th className="hidden px-4 py-3 font-semibold sm:table-cell">Owner</th>
-            <th className="px-4 py-3 font-semibold">Cards</th>
-            <th className="hidden px-4 py-3 font-semibold md:table-cell">Members</th>
-            <th className="hidden px-4 py-3 font-semibold lg:table-cell">Created</th>
-          </tr>
-        </thead>
-        <tbody>
-          {boards.map((b) => (
-            <tr key={b.id} className="border-b border-line/40 last:border-0 hover:bg-surface2/50">
-              <td className="px-4 py-3">
-                <Link to={`/b/${b.id}`} className="flex items-center gap-2.5 font-medium hover:underline">
-                  <span
-                    className="grid h-7 w-7 place-items-center rounded-sm text-xs"
-                    style={{ background: `${b.color}26`, color: b.color }}
-                  >
-                    {b.icon || <SquareKanban size={13} />}
-                  </span>
-                  <span className="truncate">{b.title}</span>
-                  {b.isArchived && <span className="chip bg-surface3/70 text-muted">archived</span>}
-                  {b.isPublic && <span className="chip bg-primary/14 text-primary">public</span>}
-                </Link>
-              </td>
-              <td className="hidden px-4 py-3 text-muted sm:table-cell">{b.createdBy?.name}</td>
-              <td className="px-4 py-3">{b._count.cards}</td>
-              <td className="hidden px-4 py-3 md:table-cell">{b._count.members}</td>
-              <td className="hidden px-4 py-3 text-xs text-muted lg:table-cell">
-                {formatDate(b.createdAt)}
-              </td>
+    <>
+      <div className="glass overflow-hidden rounded-xl">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-line/70 text-left text-xs uppercase tracking-wide text-muted">
+              <th className="px-4 py-3 font-semibold">Board</th>
+              <th className="hidden px-4 py-3 font-semibold sm:table-cell">Owner</th>
+              <th className="px-4 py-3 font-semibold">Cards</th>
+              <th className="hidden px-4 py-3 font-semibold md:table-cell">Members</th>
+              <th className="hidden px-4 py-3 font-semibold lg:table-cell">Created</th>
+              {showActions && <th className="px-4 py-3 text-right font-semibold">Actions</th>}
             </tr>
-          ))}
-          {boards.length === 0 && (
-            <tr>
-              <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted">
-                No boards on this instance yet.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {boards.map((b) => (
+              <tr key={b.id} className="border-b border-line/40 last:border-0 hover:bg-surface2/50">
+                <td className="px-4 py-3">
+                  {renaming && renaming.id === b.id ? (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        className="input py-1 text-sm"
+                        value={renaming.title}
+                        autoFocus
+                        maxLength={120}
+                        disabled={busy}
+                        onChange={(e) => setRenaming({ id: b.id, title: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            saveTitle();
+                          }
+                          if (e.key === 'Escape') setRenaming(null);
+                        }}
+                      />
+                      <button
+                        className="btn btn-primary py-1 text-xs"
+                        onClick={saveTitle}
+                        disabled={busy}
+                      >
+                        {busy ? <Spinner size={13} /> : 'Save'}
+                      </button>
+                      <button
+                        className="btn btn-subtle py-1 text-xs"
+                        onClick={() => setRenaming(null)}
+                        disabled={busy}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <Link
+                      to={`/b/${b.id}`}
+                      className="flex items-center gap-2.5 font-medium hover:underline"
+                    >
+                      <span
+                        className="grid h-7 w-7 place-items-center rounded-sm text-xs"
+                        style={{ background: `${b.color}26`, color: b.color }}
+                      >
+                        {b.icon || <SquareKanban size={13} />}
+                      </span>
+                      <span className="truncate">{b.title}</span>
+                      {b.isArchived && (
+                        <span className="chip bg-surface3/70 text-muted">archived</span>
+                      )}
+                      {b.isPublic && <span className="chip bg-primary/14 text-primary">public</span>}
+                    </Link>
+                  )}
+                </td>
+                <td className="hidden px-4 py-3 text-muted sm:table-cell">{b.createdBy?.name}</td>
+                <td className="px-4 py-3">{b._count.cards}</td>
+                <td className="hidden px-4 py-3 md:table-cell">{b._count.members}</td>
+                <td className="hidden px-4 py-3 text-xs text-muted lg:table-cell">
+                  {formatDate(b.createdAt)}
+                </td>
+                {showActions && (
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      {canRename && renaming?.id !== b.id && (
+                        <button
+                          className="btn btn-ghost btn-icon text-muted hover:text-ink"
+                          onClick={() => setRenaming({ id: b.id, title: b.title })}
+                          aria-label={`Rename ${b.title}`}
+                          title="Rename"
+                        >
+                          <Pencil size={15} />
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button
+                          className="btn btn-ghost btn-icon text-muted hover:text-danger"
+                          onClick={() => setDeleting(b)}
+                          aria-label={`Delete ${b.title}`}
+                          title="Delete board"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                )}
+              </tr>
+            ))}
+            {boards.length === 0 && (
+              <tr>
+                <td
+                  colSpan={showActions ? 6 : 5}
+                  className="px-4 py-10 text-center text-sm text-muted"
+                >
+                  No boards on this instance yet.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <ConfirmDialog
+        open={!!deleting}
+        title={deleting ? `Delete "${deleting.title}"?` : ''}
+        message={
+          deleting
+            ? `Every list, card, comment and attachment on this board is permanently removed. It currently holds ${deleting._count.cards} cards and ${deleting._count.members} members.`
+            : ''
+        }
+        confirmLabel="Delete board"
+        onCancel={() => setDeleting(null)}
+        onConfirm={removeBoard}
+      />
+    </>
   );
 }

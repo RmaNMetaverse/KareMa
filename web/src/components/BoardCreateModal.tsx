@@ -37,6 +37,7 @@ export function BoardCreateModal({
     e.preventDefault();
     if (!title.trim()) return;
     setSaving(true);
+    let created: any = null;
     try {
       const res = await post<{ board: any }>('/api/boards', {
         title: title.trim(),
@@ -45,14 +46,20 @@ export function BoardCreateModal({
         icon,
         withStarterLists: starter,
       });
-      toast({ title: 'Board created', tone: 'success' });
-      onCreated(res.board);
-      onClose();
+      created = res?.board ?? null;
     } catch (err: any) {
       toast({ title: 'Could not create the board', description: err.message, tone: 'error' });
-    } finally {
       setSaving(false);
+      return;
     }
+    setSaving(false);
+
+    // The board exists from here on. Close first, so that anything the parent
+    // does next -- reloading a list, navigating -- cannot strand this modal
+    // open and make a successful create look like a failure.
+    toast({ title: 'Board created', tone: 'success' });
+    onClose();
+    if (created) onCreated(created);
   };
 
   return (

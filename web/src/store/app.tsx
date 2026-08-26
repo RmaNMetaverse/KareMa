@@ -56,6 +56,10 @@ type AppState = {
   dismissToast: (id: string) => void;
   unread: number;
   setUnread: (n: number) => void;
+  /** Bumped whenever a board is created, renamed or deleted. */
+  boardsStamp: number;
+  /** Ask every board list on screen to reload. */
+  refreshBoards: () => void;
 };
 
 const Ctx = createContext<AppState | null>(null);
@@ -66,6 +70,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [prefs, setPrefsState] = useState<Prefs>(() => loadLocalPrefs());
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [unread, setUnread] = useState(0);
+  const [boardsStamp, setBoardsStamp] = useState(0);
   const syncTimer = useRef<ReturnType<typeof setTimeout>>();
 
   // paint the theme as early as possible
@@ -177,6 +182,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
+  const refreshBoards = useCallback(() => setBoardsStamp((n) => n + 1), []);
+
   const value = useMemo<AppState>(
     () => ({
       user,
@@ -192,8 +199,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       dismissToast,
       unread,
       setUnread,
+      boardsStamp,
+      refreshBoards,
     }),
-    [user, loading, prefs, setPrefs, resetPrefs, login, logout, refreshUser, toasts, toast, dismissToast, unread]
+    [user, loading, prefs, setPrefs, resetPrefs, login, logout, refreshUser, toasts, toast, dismissToast, unread, boardsStamp, refreshBoards]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
