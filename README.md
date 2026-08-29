@@ -80,9 +80,12 @@ a parent leaves its children standing on their own rather than taking them with 
 
 Sub-tasks travel with their parent: colour and priority set on the parent flow down the
 whole tree, and dragging a parent to another list takes its children along, landing them
-directly beneath it. On the board, the `2/4` chip on a parent folds its sub-tasks out of
-sight so an epic with a dozen children does not swamp the column — the fold is remembered
-per board, in your browser only.
+directly beneath it. On the board, the arrow beside a parent's title folds its sub-tasks
+out of sight so an epic with a dozen children does not swamp the column, and a list's
+`...` menu has **Fold all sub-tasks** to do the whole column at once. A card is only
+folded away where its parent sits beside it, so a sub-task you moved elsewhere never
+vanishes with no control anywhere to bring it back. The fold is remembered per board, in
+your browser only.
 
 ### A real editor for descriptions and comments
 

@@ -2,7 +2,17 @@ import { useEffect, useRef, useState } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Archive, Copy, GripVertical, MoreHorizontal, Plus, Trash2, X } from 'lucide-react';
+import {
+  Archive,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  Copy,
+  GripVertical,
+  MoreHorizontal,
+  Plus,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { MenuItem, Popover } from '../ui';
 import { CardData, CardTile } from './CardTile';
@@ -31,6 +41,7 @@ export function ListColumn({
   childCounts,
   foldedCards,
   onToggleSubtasks,
+  onFoldAll,
 }: {
   list: ListData;
   canEdit: boolean;
@@ -47,7 +58,12 @@ export function ListColumn({
   childCounts?: Record<string, number>;
   foldedCards?: Set<string>;
   onToggleSubtasks?: (cardId: string) => void;
+  onFoldAll?: (cardIds: string[], fold: boolean) => void;
 }) {
+  // every card in this list that has sub-tasks sitting beside it
+  const foldableParents = Object.keys(childCounts ?? {});
+  const allFolded =
+    foldableParents.length > 0 && foldableParents.every((id) => foldedCards?.has(id));
   const {
     attributes,
     listeners,
@@ -182,6 +198,19 @@ export function ListColumn({
                   >
                     Duplicate list
                   </MenuItem>
+                  {foldableParents.length > 0 && onFoldAll && (
+                    <MenuItem
+                      icon={
+                        allFolded ? <ChevronsUpDown size={14} /> : <ChevronsDownUp size={14} />
+                      }
+                      onClick={() => {
+                        close();
+                        onFoldAll(foldableParents, !allFolded);
+                      }}
+                    >
+                      {allFolded ? 'Unfold all sub-tasks' : 'Fold all sub-tasks'}
+                    </MenuItem>
+                  )}
                   <div className="divider my-1.5" />
                   <p className="px-2.5 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">
                     Colour

@@ -136,6 +136,22 @@ export function BoardPage() {
     });
   };
 
+  const foldMany = (cardIds: string[], fold: boolean) => {
+    setFoldedCards((prev) => {
+      const next = new Set(prev);
+      for (const id of cardIds) {
+        if (fold) next.add(id);
+        else next.delete(id);
+      }
+      try {
+        localStorage.setItem(`karema.folded.${boardId}`, JSON.stringify([...next]));
+      } catch {
+        /* private mode */
+      }
+      return next;
+    });
+  };
+
   const switchView = (next: 'board' | 'list') => {
     setView(next);
     try {
@@ -686,6 +702,7 @@ export function BoardPage() {
                     childCounts={list.childCounts}
                     foldedCards={foldedCards}
                     onToggleSubtasks={toggleSubtasks}
+                    onFoldAll={foldMany}
                     onOpenCard={openCard}
                     onAddCard={addCard}
                     onRename={(id, title) => updateList(id, { title })}

@@ -168,14 +168,42 @@ export function CardTile({
             </div>
           )}
 
-          <p
-            className={cn(
-              'text-[13.5px] font-medium leading-snug',
-              card.isComplete && 'text-muted line-through'
+          <div className="flex items-start gap-1">
+            {foldable > 0 && onToggleSubtasks && (
+              <button
+                type="button"
+                aria-expanded={!folded}
+                aria-label={
+                  folded
+                    ? `Show ${foldable} subtask${foldable === 1 ? '' : 's'}`
+                    : `Hide ${foldable} subtask${foldable === 1 ? '' : 's'}`
+                }
+                title={
+                  folded
+                    ? `Show ${foldable} subtask${foldable === 1 ? '' : 's'}`
+                    : `Hide ${foldable} subtask${foldable === 1 ? '' : 's'}`
+                }
+                onClick={(e) => {
+                  // the whole tile opens the card, so this must not bubble
+                  e.stopPropagation();
+                  e.preventDefault();
+                  onToggleSubtasks();
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="-ml-1 mt-px grid h-5 w-5 shrink-0 place-items-center rounded-sm text-muted transition-colors hover:bg-surface3/80 hover:text-ink"
+              >
+                {folded ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
+              </button>
             )}
-          >
-            {card.title}
-          </p>
+            <p
+              className={cn(
+                'flex-1 text-[13.5px] font-medium leading-snug',
+                card.isComplete && 'text-muted line-through'
+              )}
+            >
+              {card.title}
+            </p>
+          </div>
 
           {(due !== 'none' ||
             comments > 0 ||
@@ -211,44 +239,22 @@ export function CardTile({
                   <CornerDownRight size={12} />
                 </span>
               )}
-              {subtasks.length > 0 &&
-                (foldable > 0 && onToggleSubtasks ? (
-                  <button
-                    type="button"
-                    aria-expanded={!folded}
-                    title={
-                      folded
-                        ? `Show ${foldable} subtask${foldable === 1 ? '' : 's'} in this list`
-                        : `Hide ${foldable} subtask${foldable === 1 ? '' : 's'} in this list`
-                    }
-                    onClick={(e) => {
-                      // the whole tile opens the card, so this must not bubble
-                      e.stopPropagation();
-                      e.preventDefault();
-                      onToggleSubtasks();
-                    }}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    className={cn(
-                      'chip transition-colors hover:bg-surface3/80 hover:text-ink',
-                      subtasksDone === subtasks.length && 'bg-success/16 text-success'
-                    )}
-                  >
-                    {folded ? <ChevronRight size={11} /> : <ChevronDown size={11} />}
-                    <GitBranch size={11} />
-                    {subtasksDone}/{subtasks.length}
-                  </button>
-                ) : (
-                  <span
-                    className={cn(
-                      'chip',
-                      subtasksDone === subtasks.length && 'bg-success/16 text-success'
-                    )}
-                    title="Subtasks"
-                  >
-                    <GitBranch size={11} />
-                    {subtasksDone}/{subtasks.length}
-                  </span>
-                ))}
+              {subtasks.length > 0 && (
+                <span
+                  className={cn(
+                    'chip',
+                    subtasksDone === subtasks.length && 'bg-success/16 text-success'
+                  )}
+                  title={
+                    foldable > 0
+                      ? 'Subtasks — use the arrow by the title to fold them away'
+                      : 'Subtasks (none of them are in this list)'
+                  }
+                >
+                  <GitBranch size={11} />
+                  {subtasksDone}/{subtasks.length}
+                </span>
+              )}
               {items.length > 0 && (
                 <span
                   className={cn('chip', done === items.length && 'bg-success/16 text-success')}
