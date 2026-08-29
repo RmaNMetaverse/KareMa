@@ -3,6 +3,8 @@ import { CSS } from '@dnd-kit/utilities';
 import {
   AlignLeft,
   CheckSquare,
+  ChevronDown,
+  ChevronRight,
   Clock,
   CornerDownRight,
   GitBranch,
@@ -49,12 +51,19 @@ export function CardTile({
   compactLabels = false,
   isDragging,
   disabled,
+  foldable = 0,
+  folded = false,
+  onToggleSubtasks,
 }: {
   card: CardData;
   onOpen: () => void;
   compactLabels?: boolean;
   isDragging?: boolean;
   disabled?: boolean;
+  /** how many of this card's sub-tasks sit in the same list, and so can be folded away */
+  foldable?: number;
+  folded?: boolean;
+  onToggleSubtasks?: () => void;
 }) {
   const sortable = useSortable({ id: card.id, data: { type: 'card', card }, disabled });
   const {
@@ -202,15 +211,44 @@ export function CardTile({
                   <CornerDownRight size={12} />
                 </span>
               )}
-              {subtasks.length > 0 && (
-                <span
-                  className={cn('chip', subtasksDone === subtasks.length && 'bg-success/16 text-success')}
-                  title="Subtasks"
-                >
-                  <GitBranch size={11} />
-                  {subtasksDone}/{subtasks.length}
-                </span>
-              )}
+              {subtasks.length > 0 &&
+                (foldable > 0 && onToggleSubtasks ? (
+                  <button
+                    type="button"
+                    aria-expanded={!folded}
+                    title={
+                      folded
+                        ? `Show ${foldable} subtask${foldable === 1 ? '' : 's'} in this list`
+                        : `Hide ${foldable} subtask${foldable === 1 ? '' : 's'} in this list`
+                    }
+                    onClick={(e) => {
+                      // the whole tile opens the card, so this must not bubble
+                      e.stopPropagation();
+                      e.preventDefault();
+                      onToggleSubtasks();
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className={cn(
+                      'chip transition-colors hover:bg-surface3/80 hover:text-ink',
+                      subtasksDone === subtasks.length && 'bg-success/16 text-success'
+                    )}
+                  >
+                    {folded ? <ChevronRight size={11} /> : <ChevronDown size={11} />}
+                    <GitBranch size={11} />
+                    {subtasksDone}/{subtasks.length}
+                  </button>
+                ) : (
+                  <span
+                    className={cn(
+                      'chip',
+                      subtasksDone === subtasks.length && 'bg-success/16 text-success'
+                    )}
+                    title="Subtasks"
+                  >
+                    <GitBranch size={11} />
+                    {subtasksDone}/{subtasks.length}
+                  </span>
+                ))}
               {items.length > 0 && (
                 <span
                   className={cn('chip', done === items.length && 'bg-success/16 text-success')}

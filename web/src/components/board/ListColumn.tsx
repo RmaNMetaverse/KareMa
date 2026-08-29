@@ -28,6 +28,9 @@ export function ListColumn({
   onDuplicate,
   onArchiveCards,
   onDelete,
+  childCounts,
+  foldedCards,
+  onToggleSubtasks,
 }: {
   list: ListData;
   canEdit: boolean;
@@ -40,6 +43,10 @@ export function ListColumn({
   onDuplicate: (listId: string) => void;
   onArchiveCards: (listId: string) => void;
   onDelete: (listId: string) => void;
+  /** card id -> how many of its sub-tasks are in this list */
+  childCounts?: Record<string, number>;
+  foldedCards?: Set<string>;
+  onToggleSubtasks?: (cardId: string) => void;
 }) {
   const {
     attributes,
@@ -272,6 +279,9 @@ export function ListColumn({
                 compactLabels={compactLabels}
                 disabled={!canEdit}
                 onOpen={() => onOpenCard(card.id)}
+                foldable={childCounts?.[card.id] ?? 0}
+                folded={foldedCards?.has(card.id) ?? false}
+                onToggleSubtasks={onToggleSubtasks ? () => onToggleSubtasks(card.id) : undefined}
               />
             ))}
           </SortableContext>

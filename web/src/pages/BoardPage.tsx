@@ -108,6 +108,34 @@ export function BoardPage() {
     }
   });
 
+  // Which parents have their sub-tasks folded away on this board. Kept per
+  // board in this browser: it is a way of looking at the board, not a property
+  // of the work, so it should not follow other people around.
+  const [foldedCards, setFoldedCards] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`karema.folded.${boardId}`);
+      setFoldedCards(new Set<string>(raw ? JSON.parse(raw) : []));
+    } catch {
+      setFoldedCards(new Set());
+    }
+  }, [boardId]);
+
+  const toggleSubtasks = (cardId: string) => {
+    setFoldedCards((prev) => {
+      const next = new Set(prev);
+      if (next.has(cardId)) next.delete(cardId);
+      else next.add(cardId);
+      try {
+        localStorage.setItem(`karema.folded.${boardId}`, JSON.stringify([...next]));
+      } catch {
+        /* private mode */
+      }
+      return next;
+    });
+  };
+
   const switchView = (next: 'board' | 'list') => {
     setView(next);
     try {
@@ -256,8 +284,26 @@ export function BoardPage() {
         }
         return true;
       }),
-    }));
-  }, [lists, filters]);
+    })).map((list) => {
+      // A sub-task is only folded away where its parent is visible beside it,
+      // so a child that was moved to another list never vanishes with no
+      // control anywhere to bring it back.
+      const here = new Set(list.cards.map((c) => c.id));
+      const childCounts: Record<string, number> = {};
+      for (const card of list.cards) {
+        if (card.parentId && here.has(card.parentId)) {
+          childCounts[card.parentId] = (childCounts[card.parentId] ?? 0) + 1;
+        }
+      }
+      return {
+        ...list,
+        childCounts,
+        cards: list.cards.filter(
+          (card) => !(card.parentId && here.has(card.parentId) && foldedCards.has(card.parentId))
+        ),
+      };
+    });
+  }, [lists, filters, foldedCards]);
 
   const filterCount =
     filters.members.length +
@@ -637,6 +683,9 @@ export function BoardPage() {
                     list={list}
                     canEdit={canEdit}
                     compactLabels={compactLabels}
+                    childCounts={list.childCounts}
+                    foldedCards={foldedCards}
+                    onToggleSubtasks={toggleSubtasks}
                     onOpenCard={openCard}
                     onAddCard={addCard}
                     onRename={(id, title) => updateList(id, { title })}

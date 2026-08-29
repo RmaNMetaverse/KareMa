@@ -11,6 +11,7 @@ import {
   Flag,
   Image as ImageIcon,
   Link2,
+  MoreHorizontal,
   Paperclip,
   Plus,
   Tag,
@@ -37,6 +38,7 @@ import {
 import { Avatar, ConfirmDialog, MenuItem, Modal, Popover, Spinner } from '../ui';
 import { RichTextEditor } from './RichTextEditor';
 import { ParentBreadcrumb, ParentPicker, Subtasks } from './Subtasks';
+import { CoverCropper } from './CoverCropper';
 import { CommentComposer, CommentItem } from './CommentThread';
 
 type Props = {
@@ -284,7 +286,7 @@ export function CardModal({ cardId, board, onClose, onChanged, onOpenCard }: Pro
                   <LabelsPicker card={card} board={board} onChanged={load} />
                   <DatesPicker card={card} onUpdate={update} />
                   <PriorityPicker card={card} onUpdate={update} />
-                  <CoverPicker card={card} images={images} onUpdate={update} />
+                  <CoverPicker card={card} images={images} onUpdate={update} onRefresh={load} />
                   <button className="btn btn-subtle text-xs" onClick={() => fileRef.current?.click()}>
                     <Paperclip size={14} /> Attach
                   </button>
@@ -904,6 +906,7 @@ function Attachment({
   onSetCover: () => void;
   onDelete: () => void;
 }) {
+  const [confirming, setConfirming] = useState(false);
   const href =
     attachment.kind === 'link' ? attachment.url : withBase(`/api/files/${attachment.storedName}`);
 
@@ -942,8 +945,14 @@ function Attachment({
             align="right"
             width="w-44"
             trigger={({ toggle }) => (
-              <button className="btn btn-ghost btn-icon" onClick={toggle}>
-                <X size={14} className="rotate-45" />
+              // an X turned 45 degrees is a plus sign, which read as "add"
+              <button
+                className="btn btn-ghost btn-icon"
+                onClick={toggle}
+                aria-label={`Options for ${attachment.filename}`}
+                title="Options"
+              >
+                <MoreHorizontal size={15} />
               </button>
             )}
           >
@@ -965,16 +974,32 @@ function Attachment({
                   danger
                   onClick={() => {
                     close();
-                    onDelete();
+                    setConfirming(true);
                   }}
                 >
-                  Remove
+                  Delete
                 </MenuItem>
               </div>
             )}
           </Popover>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirming}
+        title={`Delete "${attachment.filename}"?`}
+        message={
+          attachment.kind === 'link'
+            ? 'The link is removed from this card for everyone.'
+            : 'The file is deleted from the server for everyone, and cannot be recovered.'
+        }
+        confirmLabel="Delete"
+        onCancel={() => setConfirming(false)}
+        onConfirm={() => {
+          setConfirming(false);
+          onDelete();
+        }}
+      />
     </div>
   );
 }
@@ -1178,12 +1203,39 @@ function CoverPicker({
   card,
   images,
   onUpdate,
+  onRefresh,
 }: {
   card: any;
   images: any[];
   onUpdate: (d: any) => void;
+  onRefresh?: () => void;
 }) {
+  const { toast } = useApp();
+  const [pending, setPending] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const coverFileRef = useRef<HTMLInputElement>(null);
+
+  // The cropped strip is stored as a normal attachment, which is what the
+  // "use as cover" flow already points at, so removing it clears the cover and
+  // cleans up the file without any separate bookkeeping.
+  const uploadCropped = async (blob: Blob, name: string) => {
+    setBusy(true);
+    try {
+      const res = await uploadFile(card.id, new File([blob], name, { type: 'image/jpeg' }));
+      const stored = res?.attachment?.storedName;
+      if (!stored) throw new Error('The upload did not return a file');
+      onUpdate({ coverType: 'image', coverValue: `/api/files/${stored}` });
+      setPending(null);
+      onRefresh?.();
+    } catch (err: any) {
+      toast({ title: err.message || 'Could not set the cover', tone: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
+    <>
     <Popover
       width="w-72"
       trigger={({ toggle }) => (
@@ -1193,6 +1245,18 @@ function CoverPicker({
       )}
     >
       <div className="space-y-3 p-1">
+        <div>
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">
+            Picture
+          </p>
+          <button
+            className="btn btn-subtle w-full py-1.5 text-xs"
+            onClick={() => coverFileRef.current?.click()}
+          >
+            <Upload size={13} /> Upload and crop
+          </button>
+        </div>
+
         <div>
           <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">
             Colours
@@ -1270,6 +1334,26 @@ function CoverPicker({
         )}
       </div>
     </Popover>
+
+    <input
+      ref={coverFileRef}
+      type="file"
+      accept="image/*"
+      className="hidden"
+      onChange={(e) => {
+        const f = e.target.files?.[0];
+        e.target.value = '';
+        if (f) setPending(f);
+      }}
+    />
+
+    <CoverCropper
+      file={pending}
+      busy={busy}
+      onCancel={() => setPending(null)}
+      onCrop={uploadCropped}
+    />
+    </>
   );
 }
 

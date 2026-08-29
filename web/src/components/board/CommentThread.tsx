@@ -15,7 +15,7 @@ import { del, patch, post, uploadFile } from '../../lib/api';
 import { useApp } from '../../store/app';
 import { cn, formatBytes, renderRichText, timeAgo } from '../../lib/utils';
 import { withBase } from '../../lib/base';
-import { Avatar, Spinner } from '../ui';
+import { Avatar, ConfirmDialog, Spinner } from '../ui';
 import { MentionUser } from './MentionInput';
 import { RichTextEditor } from './RichTextEditor';
 
@@ -62,6 +62,8 @@ export function CommentAttachments({
   canRemove?: boolean;
   onRemove?: (id: string) => void;
 }) {
+  const [pending, setPending] = useState<AttachmentData | null>(null);
+
   if (!attachments?.length) return null;
 
   const images = attachments.filter((a) => a.kind === 'image');
@@ -83,9 +85,10 @@ export function CommentAttachments({
               </a>
               {canRemove && (
                 <button
-                  onClick={() => onRemove?.(a.id)}
-                  className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-black/55 text-white opacity-0 backdrop-blur transition-opacity hover:bg-danger group-hover/att:opacity-100"
-                  aria-label={`Remove ${a.filename}`}
+                  onClick={() => setPending(a)}
+                  // always visible: hover-only put this out of reach on a touch screen
+                  className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-black/55 text-white opacity-80 backdrop-blur transition-colors hover:bg-danger hover:opacity-100"
+                  aria-label={`Delete ${a.filename}`}
                 >
                   <X size={12} />
                 </button>
@@ -101,9 +104,9 @@ export function CommentAttachments({
             <video src={attachmentHref(a)} controls className="w-full bg-black" />
             {canRemove && (
               <button
-                onClick={() => onRemove?.(a.id)}
+                onClick={() => setPending(a)}
                 className="absolute right-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-full bg-black/55 text-white hover:bg-danger"
-                aria-label={`Remove ${a.filename}`}
+                aria-label={`Delete ${a.filename}`}
               >
                 <X size={12} />
               </button>
@@ -113,7 +116,11 @@ export function CommentAttachments({
           <div key={a.id} className="flex max-w-sm items-center gap-2 rounded-md border border-line/60 p-1.5">
             <audio src={attachmentHref(a)} controls className="h-8 flex-1" />
             {canRemove && (
-              <button onClick={() => onRemove?.(a.id)} className="text-muted hover:text-danger">
+              <button
+                onClick={() => setPending(a)}
+                className="text-muted hover:text-danger"
+                aria-label={`Delete ${a.filename}`}
+              >
                 <X size={14} />
               </button>
             )}
@@ -139,10 +146,10 @@ export function CommentAttachments({
               <button
                 onClick={(e) => {
                   e.preventDefault();
-                  onRemove?.(a.id);
+                  setPending(a);
                 }}
                 className="shrink-0 text-muted hover:text-danger"
-                aria-label={`Remove ${a.filename}`}
+                aria-label={`Delete ${a.filename}`}
               >
                 <X size={14} />
               </button>
@@ -152,6 +159,23 @@ export function CommentAttachments({
           </a>
         )
       )}
+
+      <ConfirmDialog
+        open={!!pending}
+        title={pending ? `Delete "${pending.filename}"?` : ''}
+        message={
+          pending?.kind === 'link'
+            ? 'The link is removed from this comment for everyone.'
+            : 'The file is deleted from the server for everyone, and cannot be recovered.'
+        }
+        confirmLabel="Delete"
+        onCancel={() => setPending(null)}
+        onConfirm={() => {
+          const id = pending?.id;
+          setPending(null);
+          if (id) onRemove?.(id);
+        }}
+      />
     </div>
   );
 }

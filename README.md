@@ -43,7 +43,10 @@ land on your screen as they happen — no refresh, no lost work.
 
 - **Cards carry the whole story**: description, assignees, labels, priority, start and
   due dates, checklists, attachments, comments and a full activity trail
-- **Card colours, colour and gradient covers, image covers** — normal or full-bleed
+- **Card colours, colour and gradient covers, image covers** — normal or full-bleed.
+  Upload a picture straight onto a card and crop it first: the cover is a short, wide
+  strip, so you choose which part of the photo survives rather than letting it be
+  centre-cropped for you
 - **Per-list WIP limits** that turn red when you go over, plus list colours, duplicate a
   list with its cards, and archive a whole list's cards at once
 - **Filter by** member, label, priority, due date or free text, with a live count of
@@ -74,6 +77,12 @@ sub-tasks from the card itself, attach an existing card to a parent, or detach i
 The parent shows a progress bar and a live `2/4` count, each child links straight to its
 own card, and a breadcrumb on the child points back up. Cycles are refused, and deleting
 a parent leaves its children standing on their own rather than taking them with it.
+
+Sub-tasks travel with their parent: colour and priority set on the parent flow down the
+whole tree, and dragging a parent to another list takes its children along, landing them
+directly beneath it. On the board, the `2/4` chip on a parent folds its sub-tasks out of
+sight so an epic with a dozen children does not swamp the column — the fold is remembered
+per board, in your browser only.
 
 ### A real editor for descriptions and comments
 
