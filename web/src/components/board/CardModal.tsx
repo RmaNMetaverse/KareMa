@@ -911,16 +911,18 @@ function Attachment({
     attachment.kind === 'link' ? attachment.url : withBase(`/api/files/${attachment.storedName}`);
 
   return (
-    <div className="glass group overflow-hidden rounded-lg">
-      {attachment.kind === 'image' && (
-        <a href={href} target="_blank" rel="noreferrer">
-          <img src={href} alt={attachment.filename} className="h-28 w-full object-cover" />
-        </a>
-      )}
-      {attachment.kind === 'video' && (
-        <video src={href} controls className="h-28 w-full bg-black object-contain" />
-      )}
-      {attachment.kind === 'audio' && <audio src={href} controls className="w-full p-2" />}
+    <div className="glass group rounded-lg">
+      <div className="overflow-hidden rounded-t-lg">
+        {attachment.kind === 'image' && (
+          <a href={href} target="_blank" rel="noreferrer">
+            <img src={href} alt={attachment.filename} className="h-28 w-full object-cover" />
+          </a>
+        )}
+        {attachment.kind === 'video' && (
+          <video src={href} controls className="h-28 w-full bg-black object-contain" />
+        )}
+        {attachment.kind === 'audio' && <audio src={href} controls className="w-full p-2" />}
+      </div>
 
       <div className="flex items-center gap-2 p-2">
         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-sm bg-surface3/70 text-muted">
