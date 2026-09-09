@@ -1,12 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
-import { Image as ImageIcon, Palette, Plus, Settings2, Tag, Trash2, Upload, Users, X } from 'lucide-react';
+import {
+  Image as ImageIcon,
+  Palette,
+  Plus,
+  Settings2,
+  Tag,
+  Trash2,
+  Upload,
+  Users,
+  X,
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { del, get, patch, post, uploadBoardBackground } from '../../lib/api';
+import { del, get, patch, post, uploadBoardBackground, uploadBoardHeader } from '../../lib/api';
 import { useApp } from '../../store/app';
 import { BOARD_ICONS, cn } from '../../lib/utils';
 import { withBase } from '../../lib/base';
 import { PRESET_PRIMARIES } from '../../lib/theme';
 import { Avatar, ConfirmDialog, Field, Modal, ModalHeader, Spinner, Switch } from '../ui';
+import { CoverCropper } from './CoverCropper';
 
 const TABS = [
   { id: 'general', label: 'General', icon: <Settings2 size={15} /> },
@@ -36,9 +47,13 @@ export function BoardSettingsModal({
   const [directory, setDirectory] = useState<any[]>([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [newLabel, setNewLabel] = useState({ name: '', color: '#6366f1' });
+  const [headerImage, setHeaderImage] = useState<string | null>(board.headerImage ?? null);
+  const [pendingHeader, setPendingHeader] = useState<File | null>(null);
+  const [headerUploading, setHeaderUploading] = useState(false);
   const [background, setBackground] = useState<string | null>(board.background ?? null);
-  const [uploading, setUploading] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [backgroundUploading, setBackgroundUploading] = useState(false);
+  const headerFileRef = useRef<HTMLInputElement>(null);
+  const backgroundFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     get<{ users: any[] }>('/api/users')
@@ -65,8 +80,30 @@ export function BoardSettingsModal({
   const memberIds = new Set(board.members.map((m: any) => m.userId));
   const candidates = directory.filter((u) => !memberIds.has(u.id));
 
+  const uploadCroppedHeader = async (blob: Blob, name: string) => {
+    setHeaderUploading(true);
+    try {
+      const file = new File([blob], name, { type: 'image/jpeg' });
+      const res = await uploadBoardHeader(board.id, file);
+      setHeaderImage(res.board.headerImage);
+      setPendingHeader(null);
+      toast({ title: 'Header image updated', tone: 'success' });
+      onChanged();
+    } catch (err: any) {
+      toast({ title: err.message, tone: 'error' });
+    } finally {
+      setHeaderUploading(false);
+    }
+  };
+
   return (
-    <Modal open onClose={onClose} width="max-w-2xl" label="Board settings">
+    <>
+      <Modal
+        open
+        onClose={pendingHeader || headerUploading ? () => undefined : onClose}
+        width="max-w-2xl"
+        label="Board settings"
+      >
       <ModalHeader
         title="Board settings"
         subtitle={board.title}
@@ -127,6 +164,73 @@ export function BoardSettingsModal({
             </div>
 
             <div>
+              <p className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted">
+                <ImageIcon size={13} /> Header image
+              </p>
+              <div className="space-y-2">
+                <div
+                  className="relative aspect-[4/1] w-full overflow-hidden rounded-lg border border-line bg-surface2/60 bg-cover bg-center"
+                  style={
+                    headerImage
+                      ? { backgroundImage: `url("${withBase(headerImage)}")` }
+                      : { background: `linear-gradient(135deg, ${color}, ${color}66)` }
+                  }
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-black/55 via-black/20 to-black/40" />
+                  <div className="absolute inset-y-0 left-3 flex items-center gap-2.5 text-white drop-shadow">
+                    <span className="grid h-9 w-9 place-items-center rounded-md bg-white/20 text-lg backdrop-blur-sm">
+                      {icon || '📋'}
+                    </span>
+                    <span className="truncate text-sm font-bold">{title || 'Untitled board'}</span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    ref={headerFileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = '';
+                      if (file) setPendingHeader(file);
+                    }}
+                  />
+                  <button
+                    className="btn btn-subtle py-1.5 text-xs"
+                    disabled={headerUploading}
+                    onClick={() => headerFileRef.current?.click()}
+                  >
+                    {headerUploading ? <Spinner size={13} /> : <Upload size={13} />}
+                    {headerImage ? 'Replace and crop' : 'Upload and crop'}
+                  </button>
+                  {headerImage && (
+                    <button
+                      className="btn btn-subtle py-1.5 text-xs text-muted hover:text-danger"
+                      disabled={headerUploading}
+                      onClick={async () => {
+                        try {
+                          await del(`/api/boards/${board.id}/header`);
+                          setHeaderImage(null);
+                          toast({ title: 'Header image removed', tone: 'info' });
+                          onChanged();
+                        } catch (err: any) {
+                          toast({ title: err.message, tone: 'error' });
+                        }
+                      }}
+                    >
+                      <Trash2 size={13} /> Remove
+                    </button>
+                  )}
+                </div>
+              </div>
+              <p className="mt-1.5 text-[11px] text-muted">
+                Shown on the board and its dashboard tile. You can reposition and zoom before
+                upload.
+              </p>
+            </div>
+
+            <div>
               <p className="mb-1.5 text-xs font-medium text-muted">Icon</p>
               <div className="flex flex-wrap gap-1">
                 {BOARD_ICONS.map((e) => (
@@ -165,7 +269,7 @@ export function BoardSettingsModal({
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <input
-                    ref={fileRef}
+                    ref={backgroundFileRef}
                     type="file"
                     accept="image/*"
                     className="hidden"
@@ -173,7 +277,7 @@ export function BoardSettingsModal({
                       const file = e.target.files?.[0];
                       e.target.value = '';
                       if (!file) return;
-                      setUploading(true);
+                      setBackgroundUploading(true);
                       try {
                         const res = await uploadBoardBackground(board.id, file);
                         setBackground(res.board.background);
@@ -182,22 +286,22 @@ export function BoardSettingsModal({
                       } catch (err: any) {
                         toast({ title: err.message, tone: 'error' });
                       } finally {
-                        setUploading(false);
+                        setBackgroundUploading(false);
                       }
                     }}
                   />
                   <button
                     className="btn btn-subtle py-1.5 text-xs"
-                    disabled={uploading}
-                    onClick={() => fileRef.current?.click()}
+                    disabled={backgroundUploading}
+                    onClick={() => backgroundFileRef.current?.click()}
                   >
-                    {uploading ? <Spinner size={13} /> : <Upload size={13} />}
+                    {backgroundUploading ? <Spinner size={13} /> : <Upload size={13} />}
                     {background ? 'Replace' : 'Upload'}
                   </button>
                   {background && (
                     <button
                       className="btn btn-subtle py-1.5 text-xs text-muted hover:text-danger"
-                      disabled={uploading}
+                      disabled={backgroundUploading}
                       onClick={async () => {
                         try {
                           await del(`/api/boards/${board.id}/background`);
@@ -415,6 +519,19 @@ export function BoardSettingsModal({
           navigate('/');
         }}
       />
-    </Modal>
+      </Modal>
+      <CoverCropper
+        file={pendingHeader}
+        busy={headerUploading}
+        aspectRatio={4}
+        outputWidth={1600}
+        title="Crop the board header"
+        subtitle="Drag to reposition and zoom to fill the wide header frame."
+        actionLabel="Use as header"
+        fileSuffix="header"
+        onCancel={() => setPendingHeader(null)}
+        onCrop={uploadCroppedHeader}
+      />
+    </>
   );
 }

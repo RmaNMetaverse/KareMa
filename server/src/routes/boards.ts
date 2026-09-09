@@ -218,6 +218,50 @@ boardsRouter.delete('/:id/background', async (req, res) => {
   res.json({ board });
 });
 
+/* ----------------------------------------------------------- header image */
+
+/** Set the cropped image shown across the board header and its dashboard tile. */
+boardsRouter.post('/:id/header', uploadImage.single('file'), async (req, res) => {
+  const access = await getBoardAccess(req.user!, req.params.id);
+  if (!access?.canManage) {
+    removeStoredFile(req.file?.filename);
+    return res.status(403).json({ error: 'You cannot edit this board' });
+  }
+  if (!req.file) return res.status(400).json({ error: 'No image was uploaded' });
+
+  const current = await prisma.board.findUnique({
+    where: { id: req.params.id },
+    select: { headerImage: true },
+  });
+  const board = await prisma.board.update({
+    where: { id: req.params.id },
+    data: { headerImage: `/api/files/${req.file.filename}` },
+  });
+
+  removeStoredFile(storedNameFromUrl(current?.headerImage));
+  await logActivity(board.id, req.user!.id, 'board.header.set', {});
+  emitBoard(board.id, 'board:updated', board);
+  res.json({ board });
+});
+
+boardsRouter.delete('/:id/header', async (req, res) => {
+  const access = await getBoardAccess(req.user!, req.params.id);
+  if (!access?.canManage) return res.status(403).json({ error: 'You cannot edit this board' });
+
+  const current = await prisma.board.findUnique({
+    where: { id: req.params.id },
+    select: { headerImage: true },
+  });
+  const board = await prisma.board.update({
+    where: { id: req.params.id },
+    data: { headerImage: null },
+  });
+
+  removeStoredFile(storedNameFromUrl(current?.headerImage));
+  emitBoard(board.id, 'board:updated', board);
+  res.json({ board });
+});
+
 boardsRouter.post('/:id/star', async (req, res) => {
   const access = await getBoardAccess(req.user!, req.params.id);
   if (!access) return res.status(404).json({ error: 'Board not found' });
@@ -239,7 +283,13 @@ boardsRouter.delete('/:id', async (req, res) => {
   const isOwner = access?.role === 'OWNER' || req.user!.can('boards.deleteAny');
   if (!isOwner) return res.status(403).json({ error: 'Only the board owner can delete it' });
 
+  const board = await prisma.board.findUnique({
+    where: { id: req.params.id },
+    select: { background: true, headerImage: true },
+  });
   await prisma.board.delete({ where: { id: req.params.id } });
+  removeStoredFile(storedNameFromUrl(board?.background));
+  removeStoredFile(storedNameFromUrl(board?.headerImage));
   res.json({ ok: true });
 });
 

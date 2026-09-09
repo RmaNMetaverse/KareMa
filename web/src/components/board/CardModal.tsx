@@ -1396,6 +1396,8 @@ function describeActivity(a: any) {
       return 'detached this from its parent';
     case 'board.background.set':
       return 'changed the board background';
+    case 'board.header.set':
+      return 'changed the board header image';
     default:
       return a.type;
   }

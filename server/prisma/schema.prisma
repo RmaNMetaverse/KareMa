@@ -64,6 +64,7 @@ model Board {
   title       String
   description String?
   color       String   @default("#6366f1")
+  headerImage String?
   background  String?
   icon        String?
   isArchived  Boolean  @default(false)

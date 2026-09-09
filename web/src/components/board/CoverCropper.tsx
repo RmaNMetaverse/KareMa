@@ -10,19 +10,28 @@ import { Modal, ModalHeader, Slider, Spinner } from '../ui';
  * (about 5:1), both of which centre-crop whatever they are given.
  */
 const FRAME_W = 468;
-const FRAME_H = 156;
-const OUT_W = 1600;
-const OUT_H = Math.round((OUT_W * FRAME_H) / FRAME_W);
 const MAX_ZOOM = 4;
 
 export function CoverCropper({
   file,
   busy = false,
+  aspectRatio = 3,
+  outputWidth = 1600,
+  title = 'Crop the cover',
+  subtitle = 'Drag to reposition, zoom to fill. This is the strip the card will show.',
+  actionLabel = 'Use as cover',
+  fileSuffix = 'cover',
   onCancel,
   onCrop,
 }: {
   file: File | null;
   busy?: boolean;
+  aspectRatio?: number;
+  outputWidth?: number;
+  title?: string;
+  subtitle?: string;
+  actionLabel?: string;
+  fileSuffix?: string;
   onCancel: () => void;
   onCrop: (blob: Blob, name: string) => void;
 }) {
@@ -31,9 +40,13 @@ export function CoverCropper({
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [error, setError] = useState('');
   const drag = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
+  const frameHeight = Math.round(FRAME_W / aspectRatio);
+  const outputHeight = Math.round(outputWidth / aspectRatio);
 
   // how much the image must be scaled just to fill the frame
-  const baseScale = img ? Math.max(FRAME_W / img.naturalWidth, FRAME_H / img.naturalHeight) : 1;
+  const baseScale = img
+    ? Math.max(FRAME_W / img.naturalWidth, frameHeight / img.naturalHeight)
+    : 1;
   const scale = baseScale * zoom;
   const dispW = img ? img.naturalWidth * scale : 0;
   const dispH = img ? img.naturalHeight * scale : 0;
@@ -42,14 +55,14 @@ export function CoverCropper({
     (x: number, y: number) => ({
       // never let the frame see past the edge of the picture
       x: Math.min(0, Math.max(FRAME_W - dispW, x)),
-      y: Math.min(0, Math.max(FRAME_H - dispH, y)),
+      y: Math.min(0, Math.max(frameHeight - dispH, y)),
     }),
-    [dispW, dispH]
+    [dispW, dispH, frameHeight]
   );
 
   const centre = useCallback(
-    (w: number, h: number) => ({ x: (FRAME_W - w) / 2, y: (FRAME_H - h) / 2 }),
-    []
+    (w: number, h: number) => ({ x: (FRAME_W - w) / 2, y: (frameHeight - h) / 2 }),
+    [frameHeight]
   );
 
   useEffect(() => {
@@ -63,7 +76,7 @@ export function CoverCropper({
     el.onload = () => {
       setImg(el);
       setZoom(1);
-      const s = Math.max(FRAME_W / el.naturalWidth, FRAME_H / el.naturalHeight);
+      const s = Math.max(FRAME_W / el.naturalWidth, frameHeight / el.naturalHeight);
       setOffset(centre(el.naturalWidth * s, el.naturalHeight * s));
     };
     el.onerror = () => setError('That file could not be read as an image.');
@@ -93,19 +106,19 @@ export function CoverCropper({
   const reset = () => {
     if (!img) return;
     setZoom(1);
-    const s = Math.max(FRAME_W / img.naturalWidth, FRAME_H / img.naturalHeight);
+    const s = Math.max(FRAME_W / img.naturalWidth, frameHeight / img.naturalHeight);
     setOffset(centre(img.naturalWidth * s, img.naturalHeight * s));
   };
 
   const apply = () => {
     if (!img || !file) return;
     const canvas = document.createElement('canvas');
-    canvas.width = OUT_W;
-    canvas.height = OUT_H;
+    canvas.width = outputWidth;
+    canvas.height = outputHeight;
     const ctx = canvas.getContext('2d');
     if (!ctx) return setError('Your browser could not prepare the image.');
 
-    const k = OUT_W / FRAME_W;
+    const k = outputWidth / FRAME_W;
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(img, offset.x * k, offset.y * k, dispW * k, dispH * k);
 
@@ -113,7 +126,7 @@ export function CoverCropper({
     canvas.toBlob(
       (blob) => {
         if (!blob) return setError('Your browser could not prepare the image.');
-        onCrop(blob, `${base}-cover.jpg`);
+        onCrop(blob, `${base}-${fileSuffix}.jpg`);
       },
       'image/jpeg',
       0.9
@@ -121,10 +134,10 @@ export function CoverCropper({
   };
 
   return (
-    <Modal open={!!file} onClose={busy ? () => undefined : onCancel} width="max-w-xl" label="Crop cover">
+    <Modal open={!!file} onClose={busy ? () => undefined : onCancel} width="max-w-xl" label={title}>
       <ModalHeader
-        title="Crop the cover"
-        subtitle="Drag to reposition, zoom to fill. This is the strip the card will show."
+        title={title}
+        subtitle={subtitle}
         icon={<Crop size={18} />}
         onClose={busy ? () => undefined : onCancel}
       />
@@ -133,9 +146,9 @@ export function CoverCropper({
         <div className="flex justify-center">
           <div
             // a ring rather than a border: a border would eat 2px of the content
-            // box, and the clamp below assumes the frame is exactly FRAME_W x FRAME_H
+            // box, and the clamp below assumes the exact frame dimensions
             className="relative touch-none overflow-hidden rounded-lg bg-surface2/60 ring-1 ring-line"
-            style={{ width: FRAME_W, height: FRAME_H, cursor: img ? 'grab' : 'default' }}
+            style={{ width: FRAME_W, height: frameHeight, cursor: img ? 'grab' : 'default' }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={endDrag}
@@ -182,7 +195,7 @@ export function CoverCropper({
           </button>
           <button className="btn btn-primary" onClick={apply} disabled={!img || busy}>
             {busy ? <Spinner size={15} /> : <ZoomIn size={15} />}
-            Use as cover
+            {actionLabel}
           </button>
         </div>
       </div>

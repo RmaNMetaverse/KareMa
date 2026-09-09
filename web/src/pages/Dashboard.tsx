@@ -4,6 +4,7 @@ import { Archive, Layers, Plus, SquareKanban, Star, Users } from 'lucide-react';
 import { get, post } from '../lib/api';
 import { useApp } from '../store/app';
 import { cn, timeAgo } from '../lib/utils';
+import { withBase } from '../lib/base';
 import { AvatarStack, EmptyState, Spinner } from '../components/ui';
 import { BoardCreateModal } from '../components/BoardCreateModal';
 
@@ -12,6 +13,7 @@ type Board = {
   title: string;
   description?: string | null;
   color: string;
+  headerImage?: string | null;
   icon?: string | null;
   starred: boolean;
   myRole: string;
@@ -183,9 +185,13 @@ function BoardCard({
       className="glass glass-sheen glass-hover group relative flex min-h-[10rem] flex-col overflow-hidden rounded-xl"
     >
       <div
-        className="relative h-20 shrink-0"
+        className="relative h-20 shrink-0 bg-cover bg-center"
         style={{
-          background: `linear-gradient(135deg, ${board.color}, ${board.color}55)`,
+          backgroundImage: board.headerImage
+            ? `linear-gradient(to right, rgb(0 0 0 / 0.38), rgb(0 0 0 / 0.12)), url("${withBase(
+                board.headerImage
+              )}")`
+            : `linear-gradient(135deg, ${board.color}, ${board.color}55)`,
         }}
       >
         <span className="absolute bottom-3 left-4 grid h-10 w-10 place-items-center rounded-lg bg-white/25 text-xl backdrop-blur-sm">

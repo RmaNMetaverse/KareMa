@@ -53,6 +53,7 @@ type BoardData = {
   title: string;
   description?: string | null;
   color: string;
+  headerImage?: string | null;
   background?: string | null;
   icon?: string | null;
   isPublic: boolean;
@@ -560,24 +561,56 @@ export function BoardPage() {
       )}
 
       {/* ------------------------------------------------------- board header */}
-      <div className="glass flex flex-wrap items-center gap-2 border-b px-4 py-2.5">
+      <div
+        className={cn(
+          'glass relative flex flex-wrap items-center gap-2 overflow-hidden border-b px-4 py-2.5',
+          board.headerImage && 'min-h-20 border-line/30'
+        )}
+      >
+        {board.headerImage && (
+          <>
+            <div
+              aria-hidden
+              className="absolute inset-0 bg-cover bg-center"
+              style={{ backgroundImage: `url("${withBase(board.headerImage)}")` }}
+            />
+            <div
+              aria-hidden
+              className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/45 to-black/60"
+            />
+          </>
+        )}
         <span
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-base"
-          style={{ background: `${board.color}26`, color: board.color }}
+          className="relative z-10 grid h-8 w-8 shrink-0 place-items-center rounded-md text-base"
+          style={
+            board.headerImage
+              ? { background: 'rgb(255 255 255 / 0.2)', color: 'white' }
+              : { background: `${board.color}26`, color: board.color }
+          }
         >
           {board.icon || '📋'}
         </span>
-        <h1 className="min-w-0 truncate text-[15px] font-bold tracking-tight">{board.title}</h1>
+        <h1
+          className={cn(
+            'relative z-10 min-w-0 truncate text-[15px] font-bold tracking-tight',
+            board.headerImage && 'text-white drop-shadow'
+          )}
+        >
+          {board.title}
+        </h1>
 
         <button
           onClick={toggleStar}
-          className="btn btn-ghost btn-icon shrink-0"
+          className={cn(
+            'btn btn-ghost btn-icon relative z-10 shrink-0',
+            board.headerImage && 'bg-black/20 text-white hover:bg-black/35'
+          )}
           aria-label="Star board"
         >
           <Star size={16} className={board.starred ? 'fill-warning text-warning' : ''} />
         </button>
 
-        <div className="ml-1 flex items-center -space-x-2">
+        <div className="relative z-10 ml-1 flex items-center -space-x-2">
           {board.members.slice(0, 5).map((m) => (
             <Avatar key={m.userId} user={m.user} size={26} ring />
           ))}
@@ -588,7 +621,7 @@ export function BoardPage() {
           )}
         </div>
 
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="relative z-10 ml-auto flex items-center gap-1.5">
           <div className="relative hidden sm:block">
             <input
               value={filters.text}
