@@ -288,7 +288,7 @@ function ReportControls({
     onSelectedTags(selected.has(id) ? selectedTags.filter((item) => item !== id) : [...selectedTags, id]);
 
   return (
-    <div className="glass flex flex-wrap items-center gap-2 rounded-xl p-3">
+    <div className="glass relative z-20 flex flex-wrap items-center gap-2 rounded-xl p-3">
       <Popover
         width="w-72"
         trigger={({ toggle: open }) => (

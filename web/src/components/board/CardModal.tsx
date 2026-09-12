@@ -808,15 +808,6 @@ function Checklist({
       <div className="flex items-center gap-2">
         <h4 className="flex-1 text-sm font-medium">{checklist.title}</h4>
         {canEdit && (
-          <ChecklistTagsPicker
-            cardId={cardId}
-            boardId={boardId}
-            checklist={checklist}
-            boardTags={boardTags}
-            onChanged={onChanged}
-          />
-        )}
-        {canEdit && (
           <button
             className="btn btn-ghost btn-icon"
             onClick={async () => {
@@ -829,20 +820,6 @@ function Checklist({
           </button>
         )}
       </div>
-
-      {checklist.tags?.length > 0 && (
-        <div className="mt-1.5 flex flex-wrap gap-1">
-          {checklist.tags.map(({ label: tag }: any) => (
-            <span
-              key={tag.id}
-              className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
-              style={{ background: `${tag.color}2e`, color: tag.color }}
-            >
-              {tag.name || 'Unnamed'}
-            </span>
-          ))}
-        </div>
-      )}
 
       <ul className="mt-1.5 space-y-0.5">
         {checklist.items.map((item: any) => (
@@ -870,16 +847,40 @@ function Checklist({
               {/* always rendered, so hovering an empty box previews the tick */}
               <Check size={12} strokeWidth={3} />
             </button>
-            <span
-              onClick={() => toggle(item)}
-              className={cn(
-                'flex-1 text-[13px]',
-                canEdit && 'cursor-pointer',
-                item.isDone && 'text-muted line-through'
+            <div className="min-w-0 flex-1">
+              <span
+                onClick={() => toggle(item)}
+                className={cn(
+                  'block text-[13px]',
+                  canEdit && 'cursor-pointer',
+                  item.isDone && 'text-muted line-through'
+                )}
+              >
+                {item.text}
+              </span>
+              {item.tags?.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {item.tags.map(({ label: tag }: any) => (
+                    <span
+                      key={tag.id}
+                      className="rounded-full px-1.5 py-0.5 text-[9px] font-semibold"
+                      style={{ background: `${tag.color}2e`, color: tag.color }}
+                    >
+                      {tag.name || 'Unnamed'}
+                    </span>
+                  ))}
+                </div>
               )}
-            >
-              {item.text}
-            </span>
+            </div>
+            {canEdit && (
+              <ChecklistItemTagsPicker
+                cardId={cardId}
+                boardId={boardId}
+                item={item}
+                boardTags={boardTags}
+                onChanged={onChanged}
+              />
+            )}
             {canEdit && (
               <button
                 className="text-muted opacity-0 transition-opacity hover:text-danger group-hover:opacity-100"
@@ -1125,32 +1126,37 @@ function TagsPicker({ card, board, onChanged }: { card: any; board: any; onChang
   );
 }
 
-function ChecklistTagsPicker({
+function ChecklistItemTagsPicker({
   cardId,
   boardId,
-  checklist,
+  item,
   boardTags,
   onChanged,
 }: {
   cardId: string;
   boardId: string;
-  checklist: any;
+  item: any;
   boardTags: any[];
   onChanged: (card: any) => void;
 }) {
-  const applied = new Set((checklist.tags ?? []).map((relation: any) => relation.label.id));
+  const applied = new Set((item.tags ?? []).map((relation: any) => relation.label.id));
   return (
     <Popover
       align="right"
       width="w-60"
       trigger={({ toggle }) => (
-        <button className="btn btn-ghost px-2 py-1 text-[11px]" onClick={toggle}>
-          <Tag size={12} /> Tags
+        <button
+          className="btn btn-ghost btn-icon shrink-0 text-muted"
+          onClick={toggle}
+          aria-label={`Tags for ${item.text}`}
+          title="Item tags"
+        >
+          <Tag size={13} />
         </button>
       )}
     >
       <p className="px-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted">
-        Checklist tags
+        Checklist item tags
       </p>
       <div className="max-h-64 space-y-1 overflow-y-auto">
         {boardTags.map((tag: any) => (
@@ -1158,7 +1164,7 @@ function ChecklistTagsPicker({
             key={tag.id}
             onClick={async () => {
               const res = await post<{ card: any }>(
-                `/api/cards/${cardId}/checklists/${checklist.id}/tags/${tag.id}`
+                `/api/cards/${cardId}/checklist-items/${item.id}/tags/${tag.id}`
               );
               onChanged(res.card);
             }}
@@ -1181,7 +1187,7 @@ function ChecklistTagsPicker({
         boardId={boardId}
         onCreated={async (tag) => {
           const res = await post<{ card: any }>(
-            `/api/cards/${cardId}/checklists/${checklist.id}/tags/${tag.id}`
+            `/api/cards/${cardId}/checklist-items/${item.id}/tags/${tag.id}`
           );
           onChanged(res.card);
         }}

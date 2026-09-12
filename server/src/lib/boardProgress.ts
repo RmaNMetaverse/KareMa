@@ -54,8 +54,7 @@ type ProgressCard = {
   parentId: string | null;
   labels: { label: ReportTag }[];
   checklists: {
-    items: { isDone: boolean }[];
-    tags: { label: ReportTag }[];
+    items: { isDone: boolean; tags: { label: ReportTag }[] }[];
   }[];
 };
 
@@ -97,7 +96,9 @@ function collectTags(cards: ProgressCard[]): ReportTag[] {
   for (const card of cards) {
     for (const relation of card.labels) tags.set(relation.label.id, relation.label);
     for (const checklist of card.checklists) {
-      for (const relation of checklist.tags) tags.set(relation.label.id, relation.label);
+      for (const item of checklist.items) {
+        for (const relation of item.tags) tags.set(relation.label.id, relation.label);
+      }
     }
   }
   return [...tags.values()].sort((a, b) => a.name.localeCompare(b.name));
@@ -183,9 +184,13 @@ export async function getBoardProgressReport(): Promise<BoardProgressReport> {
               labels: { select: { label: { select: { id: true, name: true, color: true } } } },
               checklists: {
                 select: {
-                  items: { select: { isDone: true } },
-                  tags: {
-                    select: { label: { select: { id: true, name: true, color: true } } },
+                  items: {
+                    select: {
+                      isDone: true,
+                      tags: {
+                        select: { label: { select: { id: true, name: true, color: true } } },
+                      },
+                    },
                   },
                 },
               },

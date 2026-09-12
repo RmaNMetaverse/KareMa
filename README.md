@@ -42,8 +42,8 @@ Drag cards between lists, drag lists to reorder them, and watch everyone else's 
 land on your screen as they happen — no refresh, no lost work.
 
 - **Cards carry the whole story**: description, assignees, multiple tags, priority, start and
-  due dates, checklists with their own tags, attachments, comments and a full activity trail.
-  Create a board tag directly from either the card or checklist tag picker and apply it immediately
+  due dates, checklist items with their own tags, attachments, comments and a full activity trail.
+  Create a board tag directly from either the card or checklist-item tag picker and apply it immediately
 - **Card colours, colour and gradient covers, image covers** — normal or full-bleed.
   Upload a picture straight onto a card and crop it first: the cover is a short, wide
   strip, so you choose which part of the photo survives rather than letting it be

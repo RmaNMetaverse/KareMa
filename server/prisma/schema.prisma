@@ -183,6 +183,7 @@ model Label {
   board   Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
   cards   CardLabel[]
   checklists ChecklistTag[]
+  checklistItems ChecklistItemTag[]
 
   @@index([boardId])
 }
@@ -207,8 +208,8 @@ model Checklist {
   tags     ChecklistTag[]
 }
 
-// Labels are retained as the underlying storage model for backwards compatibility.
-// In the product these records are exposed as tags.
+// Legacy checklist-wide tag records are retained for non-destructive schema compatibility.
+// New assignments are made on ChecklistItemTag instead.
 model ChecklistTag {
   id          String    @id @default(cuid())
   checklistId String
@@ -227,6 +228,18 @@ model ChecklistItem {
   isDone      Boolean @default(false)
   position    Float
   checklist   Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  tags        ChecklistItemTag[]
+}
+
+model ChecklistItemTag {
+  id              String        @id @default(cuid())
+  checklistItemId String
+  labelId         String
+  checklistItem   ChecklistItem @relation(fields: [checklistItemId], references: [id], onDelete: Cascade)
+  label           Label         @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@unique([checklistItemId, labelId])
+  @@index([labelId])
 }
 
 model Attachment {
