@@ -4,14 +4,17 @@ import {
   CheckCircle2,
   ChevronDown,
   ClipboardCheck,
+  FileSpreadsheet,
+  FileText,
   ListChecks,
   PieChart,
   RefreshCw,
   SquareKanban,
   TriangleAlert,
 } from 'lucide-react';
-import { get } from '../../lib/api';
+import { downloadApiFile, get } from '../../lib/api';
 import { cn } from '../../lib/utils';
+import { useApp } from '../../store/app';
 import { Spinner } from '../ui';
 
 type WorkCount = { total: number; completed: number };
@@ -68,9 +71,11 @@ const PIE_COLORS = [
 ];
 
 export function BoardProgressReport() {
+  const { toast } = useApp();
   const [report, setReport] = useState<ProgressReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [exporting, setExporting] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -88,6 +93,26 @@ export function BoardProgressReport() {
   useEffect(() => {
     load();
   }, []);
+
+  const exportReport = async (format: 'csv' | 'xlsx', board?: BoardProgress) => {
+    const key = `${board?.id || 'all'}:${format}`;
+    setExporting(key);
+    try {
+      const boardQuery = board ? `&boardId=${encodeURIComponent(board.id)}` : '';
+      await downloadApiFile(
+        `/api/admin/board-progress/export?format=${format}${boardQuery}`
+      );
+      toast({
+        title: board ? `${board.title} report exported` : 'Board progress report exported',
+        description: format === 'xlsx' ? 'Excel workbook downloaded' : 'CSV file downloaded',
+        tone: 'success',
+      });
+    } catch (err: any) {
+      toast({ title: err.message || 'Export failed', tone: 'error' });
+    } finally {
+      setExporting('');
+    }
+  };
 
   if (loading && !report) return <ReportSkeleton />;
 
@@ -122,10 +147,28 @@ export function BoardProgressReport() {
             Updated {new Date(report.generatedAt).toLocaleString()}
           </p>
         </div>
-        <button className="btn btn-subtle" onClick={load} disabled={loading}>
-          {loading ? <Spinner size={14} /> : <RefreshCw size={14} />}
-          Refresh
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            className="btn btn-subtle"
+            onClick={() => exportReport('csv')}
+            disabled={!!exporting}
+          >
+            {exporting === 'all:csv' ? <Spinner size={14} /> : <FileText size={14} />}
+            Export CSV
+          </button>
+          <button
+            className="btn btn-subtle"
+            onClick={() => exportReport('xlsx')}
+            disabled={!!exporting}
+          >
+            {exporting === 'all:xlsx' ? <Spinner size={14} /> : <FileSpreadsheet size={14} />}
+            Export Excel
+          </button>
+          <button className="btn btn-subtle" onClick={load} disabled={loading || !!exporting}>
+            {loading ? <Spinner size={14} /> : <RefreshCw size={14} />}
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -176,7 +219,7 @@ export function BoardProgressReport() {
             <RemainingPieChart boards={boards} totalRemaining={totals.remainingUnits} />
           </div>
           <BoardBreakdown boards={boards} />
-          <ListProgressByBoard boards={boards} />
+          <ListProgressByBoard boards={boards} exporting={exporting} onExport={exportReport} />
         </>
       )}
     </div>
@@ -471,7 +514,15 @@ function BoardBreakdown({ boards }: { boards: BoardProgress[] }) {
   );
 }
 
-function ListProgressByBoard({ boards }: { boards: BoardProgress[] }) {
+function ListProgressByBoard({
+  boards,
+  exporting,
+  onExport,
+}: {
+  boards: BoardProgress[];
+  exporting: string;
+  onExport: (format: 'csv' | 'xlsx', board: BoardProgress) => void;
+}) {
   return (
     <section>
       <div className="mb-3">
@@ -527,6 +578,35 @@ function ListProgressByBoard({ boards }: { boards: BoardProgress[] }) {
             </summary>
 
             <div className="border-t border-line/60 p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[11px] text-muted">Export this board and its list details</p>
+                <div className="flex gap-2">
+                  <button
+                    className="btn btn-subtle py-1.5 text-xs"
+                    onClick={() => onExport('csv', board)}
+                    disabled={!!exporting}
+                  >
+                    {exporting === `${board.id}:csv` ? (
+                      <Spinner size={13} />
+                    ) : (
+                      <FileText size={13} />
+                    )}
+                    CSV
+                  </button>
+                  <button
+                    className="btn btn-subtle py-1.5 text-xs"
+                    onClick={() => onExport('xlsx', board)}
+                    disabled={!!exporting}
+                  >
+                    {exporting === `${board.id}:xlsx` ? (
+                      <Spinner size={13} />
+                    ) : (
+                      <FileSpreadsheet size={13} />
+                    )}
+                    Excel
+                  </button>
+                </div>
+              </div>
               {board.lists.length === 0 ? (
                 <div className="rounded-lg bg-surface2/45 px-4 py-8 text-center">
                   <ListChecks className="mx-auto text-muted" size={22} />

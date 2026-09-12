@@ -76,6 +76,40 @@ export const patch = <T = any>(p: string, body?: unknown) => api<T>(p, { method:
 export const put = <T = any>(p: string, body?: unknown) => api<T>(p, { method: 'PUT', body });
 export const del = <T = any>(p: string) => api<T>(p, { method: 'DELETE' });
 
+/** Download a binary API response using the same authentication as JSON requests. */
+export async function downloadApiFile(path: string) {
+  const token = getToken();
+  const url = path.startsWith('/') ? path : `/api/${path}`;
+  const res = await fetch(`${BASE}${url}`, {
+    credentials: 'include',
+    cache: 'no-store',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+
+  if (res.status === 401) {
+    setToken(null);
+    if (!location.pathname.startsWith(`${BASE}/login`)) location.href = `${BASE}/login`;
+    throw new ApiError('Your session has expired', 401);
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    const data = text ? safeJson(text) : null;
+    throw new ApiError(data?.error || `Download failed (${res.status})`, res.status);
+  }
+
+  const disposition = res.headers.get('Content-Disposition') || '';
+  const filename = /filename="?([^";]+)"?/i.exec(disposition)?.[1] || 'report-download';
+  const href = URL.createObjectURL(await res.blob());
+  const link = document.createElement('a');
+  link.href = href;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(href);
+  return filename;
+}
+
 export async function uploadFile(
   cardId: string,
   file: File,

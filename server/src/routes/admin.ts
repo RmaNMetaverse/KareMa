@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { hashPassword, requireAuth, requirePermission } from '../lib/auth';
 import { publicUser } from '../lib/selects';
+import { getBoardProgressReport } from '../lib/boardProgress';
+import { createProgressCsv, createProgressXlsx, safeReportFilename } from '../lib/reportExport';
 import {
   ALL_PERMISSIONS,
   can,
@@ -387,122 +389,40 @@ adminRouter.get('/boards', async (_req, res) => {
   res.json({ boards });
 });
 
-type ProgressCard = {
-  isComplete: boolean;
-  parentId: string | null;
-  checklists: { items: { isDone: boolean }[] }[];
-};
-
-function summariseProgress(cards: ProgressCard[]) {
-  const cardCompleted = cards.filter((card) => card.isComplete).length;
-  const subtasks = cards.filter((card) => card.parentId !== null);
-  const checklistItems = cards.flatMap((card) =>
-    card.checklists.flatMap((checklist) => checklist.items)
-  );
-  const checklistCompleted = checklistItems.filter((item) => item.isDone).length;
-  const totalUnits = cards.length + checklistItems.length;
-  const completedUnits = cardCompleted + checklistCompleted;
-
-  return {
-    progress: totalUnits ? Math.round((completedUnits / totalUnits) * 100) : 0,
-    totalUnits,
-    completedUnits,
-    remainingUnits: totalUnits - completedUnits,
-    cards: { total: cards.length, completed: cardCompleted },
-    subtasks: {
-      total: subtasks.length,
-      completed: subtasks.filter((card) => card.isComplete).length,
-    },
-    checklistItems: {
-      total: checklistItems.length,
-      completed: checklistCompleted,
-    },
-  };
-}
-
 /**
  * Instance-wide progress, weighted by concrete work units. Every active card
  * on an active list counts once (including subtask cards), and every checklist
  * item counts once. The same calculation is returned for each individual list.
  */
 adminRouter.get('/board-progress', requirePermission('reports.view'), async (_req, res) => {
-  const boards = await prisma.board.findMany({
-    where: { isArchived: false },
-    orderBy: { createdAt: 'asc' },
-    select: {
-      id: true,
-      title: true,
-      color: true,
-      icon: true,
-      lists: {
-        where: { isArchived: false },
-        orderBy: { position: 'asc' },
-        select: {
-          id: true,
-          title: true,
-          color: true,
-          cards: {
-            where: { isArchived: false },
-            select: {
-              isComplete: true,
-              parentId: true,
-              checklists: {
-                select: { items: { select: { isDone: true } } },
-              },
-            },
-          },
-        },
-      },
-    },
-  });
+  res.json({ report: await getBoardProgressReport() });
+});
 
-  const progressBoards = boards.map((board) => {
-    const lists = board.lists.map((list) => ({
-      id: list.id,
-      title: list.title,
-      color: list.color,
-      ...summariseProgress(list.cards),
-    }));
-    const summary = summariseProgress(board.lists.flatMap((list) => list.cards));
+adminRouter.get('/board-progress/export', requirePermission('reports.view'), async (req, res) => {
+  const parsed = z
+    .object({
+      format: z.enum(['csv', 'xlsx']),
+      boardId: z.string().min(1).optional(),
+    })
+    .safeParse(req.query);
+  if (!parsed.success) return res.status(400).json({ error: 'Choose CSV or XLSX format' });
 
-    return {
-      id: board.id,
-      title: board.title,
-      color: board.color,
-      icon: board.icon,
-      ...summary,
-      lists,
-    };
-  });
+  const report = await getBoardProgressReport();
+  const board = parsed.data.boardId
+    ? report.boards.find((item) => item.id === parsed.data.boardId)
+    : undefined;
+  if (parsed.data.boardId && !board) return res.status(404).json({ error: 'Board not found' });
 
-  const totals = progressBoards.reduce(
-    (sum, board) => ({
-      totalUnits: sum.totalUnits + board.totalUnits,
-      completedUnits: sum.completedUnits + board.completedUnits,
-      remainingUnits: sum.remainingUnits + board.remainingUnits,
-    }),
-    { totalUnits: 0, completedUnits: 0, remainingUnits: 0 }
-  );
+  const baseName = safeReportFilename(board?.title);
+  res.set('Content-Disposition', `attachment; filename="${baseName}.${parsed.data.format}"`);
 
-  res.json({
-    report: {
-      generatedAt: new Date().toISOString(),
-      totals: {
-        ...totals,
-        progress: totals.totalUnits
-          ? Math.round((totals.completedUnits / totals.totalUnits) * 100)
-          : 0,
-        boards: progressBoards.length,
-        completeBoards: progressBoards.filter(
-          (board) => board.totalUnits > 0 && board.remainingUnits === 0
-        ).length,
-        emptyBoards: progressBoards.filter((board) => board.totalUnits === 0).length,
-      },
-      boards: progressBoards.sort(
-        (a, b) => b.progress - a.progress || b.totalUnits - a.totalUnits
-      ),
-    },
-  });
+  if (parsed.data.format === 'csv') {
+    res.type('text/csv; charset=utf-8');
+    return res.send(createProgressCsv(report, board));
+  }
+
+  res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.send(await createProgressXlsx(report, board));
 });
 
 adminRouter.get('/settings', async (_req, res) => {
