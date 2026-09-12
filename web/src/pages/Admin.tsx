@@ -24,6 +24,7 @@ import { cn, formatBytes, formatDate, timeAgo } from '../lib/utils';
 import { PRESET_PRIMARIES } from '../lib/theme';
 import { UserReviewPanel } from '../components/admin/UserReviewPanel';
 import { LabelPresetsCard, Role, RolesTab } from '../components/admin/RolesTab';
+import { BoardProgressReport } from '../components/admin/BoardProgressReport';
 import {
   Avatar,
   ConfirmDialog,
@@ -39,6 +40,7 @@ const TABS = [
   { id: 'users', label: 'Users', icon: <Users size={16} />, permission: 'users.manage' },
   { id: 'roles', label: 'Roles', icon: <ShieldCheck size={16} />, permission: 'roles.manage' },
   { id: 'boards', label: 'Boards', icon: <LayoutGrid size={16} />, permission: 'admin.access' },
+  { id: 'reports', label: 'Reports', icon: <BarChart3 size={16} />, permission: 'reports.view' },
 ];
 
 const ROLE_STYLES: Record<string, string> = {
@@ -65,13 +67,13 @@ export function AdminPage() {
         </div>
       </div>
 
-      <div className="mt-6 flex gap-1 border-b border-line/70">
+      <div className="mt-6 flex gap-1 overflow-x-auto border-b border-line/70">
         {allowed.map((t) => (
           <button
             key={t.id}
             onClick={() => navigate(`/admin/${t.id}`)}
             className={cn(
-              'flex items-center gap-2 px-3.5 py-2.5 text-sm font-medium transition-colors',
+              'flex shrink-0 items-center gap-2 px-3.5 py-2.5 text-sm font-medium transition-colors',
               tab === t.id ? 'border-b-2 border-primary text-primary' : 'text-muted hover:text-ink'
             )}
           >
@@ -91,6 +93,7 @@ export function AdminPage() {
           </div>
         )}
         {tab === 'boards' && <BoardsTab />}
+        {tab === 'reports' && user?.permissions?.['reports.view'] && <BoardProgressReport />}
       </div>
     </div>
   );

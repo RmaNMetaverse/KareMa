@@ -387,6 +387,97 @@ adminRouter.get('/boards', async (_req, res) => {
   res.json({ boards });
 });
 
+/**
+ * Instance-wide progress, weighted by concrete work units. Every active card
+ * counts once (including subtask cards), and every checklist item counts once.
+ * That keeps a board with substantial completed work from looking identical to
+ * a board with one tiny card while avoiding counting subtasks twice.
+ */
+adminRouter.get('/board-progress', requirePermission('reports.view'), async (_req, res) => {
+  const boards = await prisma.board.findMany({
+    where: { isArchived: false },
+    orderBy: { createdAt: 'asc' },
+    select: {
+      id: true,
+      title: true,
+      color: true,
+      icon: true,
+      cards: {
+        where: { isArchived: false },
+        select: {
+          isComplete: true,
+          parentId: true,
+          checklists: {
+            select: { items: { select: { isDone: true } } },
+          },
+        },
+      },
+    },
+  });
+
+  const progressBoards = boards.map((board) => {
+    const cardTotal = board.cards.length;
+    const cardCompleted = board.cards.filter((card) => card.isComplete).length;
+    const subtasks = board.cards.filter((card) => card.parentId !== null);
+    const checklistItems = board.cards.flatMap((card) =>
+      card.checklists.flatMap((checklist) => checklist.items)
+    );
+    const checklistCompleted = checklistItems.filter((item) => item.isDone).length;
+    const totalUnits = cardTotal + checklistItems.length;
+    const completedUnits = cardCompleted + checklistCompleted;
+    const remainingUnits = totalUnits - completedUnits;
+
+    return {
+      id: board.id,
+      title: board.title,
+      color: board.color,
+      icon: board.icon,
+      progress: totalUnits ? Math.round((completedUnits / totalUnits) * 100) : 0,
+      totalUnits,
+      completedUnits,
+      remainingUnits,
+      cards: { total: cardTotal, completed: cardCompleted },
+      subtasks: {
+        total: subtasks.length,
+        completed: subtasks.filter((card) => card.isComplete).length,
+      },
+      checklistItems: {
+        total: checklistItems.length,
+        completed: checklistCompleted,
+      },
+    };
+  });
+
+  const totals = progressBoards.reduce(
+    (sum, board) => ({
+      totalUnits: sum.totalUnits + board.totalUnits,
+      completedUnits: sum.completedUnits + board.completedUnits,
+      remainingUnits: sum.remainingUnits + board.remainingUnits,
+    }),
+    { totalUnits: 0, completedUnits: 0, remainingUnits: 0 }
+  );
+
+  res.json({
+    report: {
+      generatedAt: new Date().toISOString(),
+      totals: {
+        ...totals,
+        progress: totals.totalUnits
+          ? Math.round((totals.completedUnits / totals.totalUnits) * 100)
+          : 0,
+        boards: progressBoards.length,
+        completeBoards: progressBoards.filter(
+          (board) => board.totalUnits > 0 && board.remainingUnits === 0
+        ).length,
+        emptyBoards: progressBoards.filter((board) => board.totalUnits === 0).length,
+      },
+      boards: progressBoards.sort(
+        (a, b) => b.progress - a.progress || b.totalUnits - a.totalUnits
+      ),
+    },
+  });
+});
+
 adminRouter.get('/settings', async (_req, res) => {
   const rows = await prisma.setting.findMany();
   res.json({ settings: Object.fromEntries(rows.map((r) => [r.key, r.value])) });

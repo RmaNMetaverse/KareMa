@@ -144,7 +144,7 @@ permissions:
 | `admin.access` | Open the admin panel |
 | `users.manage` | Create, edit, deactivate and delete people |
 | `roles.manage` | Add, edit and delete roles |
-| `reports.view` | Review anyone's work |
+| `reports.view` | View board progress reports and review anyone's work |
 | `labels.manage` | Edit the label presets |
 | `boards.create` | Create new boards |
 | `boards.viewAll` | See every board on the instance |

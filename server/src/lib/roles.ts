@@ -22,8 +22,8 @@ export const PERMISSIONS = [
   },
   {
     key: 'reports.view',
-    label: 'Review anyone’s work',
-    description: 'Open the per-person work review with their cards and activity.',
+    label: 'View reports',
+    description: 'Open board progress reports and per-person work reviews.',
   },
   {
     key: 'labels.manage',
