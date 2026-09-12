@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CheckCircle2,
+  ChevronDown,
   ClipboardCheck,
   ListChecks,
   PieChart,
@@ -15,11 +16,7 @@ import { Spinner } from '../ui';
 
 type WorkCount = { total: number; completed: number };
 
-type BoardProgress = {
-  id: string;
-  title: string;
-  color: string;
-  icon?: string | null;
+type ProgressMetrics = {
   progress: number;
   totalUnits: number;
   completedUnits: number;
@@ -27,6 +24,20 @@ type BoardProgress = {
   cards: WorkCount;
   subtasks: WorkCount;
   checklistItems: WorkCount;
+};
+
+type ListProgress = ProgressMetrics & {
+  id: string;
+  title: string;
+  color?: string | null;
+};
+
+type BoardProgress = ProgressMetrics & {
+  id: string;
+  title: string;
+  color: string;
+  icon?: string | null;
+  lists: ListProgress[];
 };
 
 type ProgressReport = {
@@ -165,6 +176,7 @@ export function BoardProgressReport() {
             <RemainingPieChart boards={boards} totalRemaining={totals.remainingUnits} />
           </div>
           <BoardBreakdown boards={boards} />
+          <ListProgressByBoard boards={boards} />
         </>
       )}
     </div>
@@ -456,6 +468,156 @@ function BoardBreakdown({ boards }: { boards: BoardProgress[] }) {
         </table>
       </div>
     </section>
+  );
+}
+
+function ListProgressByBoard({ boards }: { boards: BoardProgress[] }) {
+  return (
+    <section>
+      <div className="mb-3">
+        <h3 className="text-sm font-semibold">List progress by board</h3>
+        <p className="mt-0.5 text-[11px] text-muted">
+          Open a board to compare the completed and remaining work in each of its active lists.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        {boards.map((board, boardIndex) => (
+          <details
+            key={board.id}
+            className="group glass overflow-hidden rounded-xl"
+            open={boardIndex === 0}
+          >
+            <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3.5 transition-colors hover:bg-surface2/45 [&::-webkit-details-marker]:hidden">
+              <span
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-sm"
+                style={{ background: `${board.color}26`, color: board.color }}
+              >
+                {board.icon || '📋'}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="truncate text-sm font-semibold">{board.title}</span>
+                  <span className="text-[11px] text-muted">
+                    {board.lists.length} {board.lists.length === 1 ? 'list' : 'lists'}
+                  </span>
+                </div>
+                <div className="mt-1 flex items-center gap-2">
+                  <div className="h-1.5 max-w-56 flex-1 overflow-hidden rounded-full bg-surface3">
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${board.progress}%`, background: board.color }}
+                    />
+                  </div>
+                  <span className="text-[10px] tabular-nums text-muted">
+                    {board.completedUnits}/{board.totalUnits} units
+                  </span>
+                </div>
+              </div>
+              <span
+                className="chip shrink-0 font-semibold tabular-nums"
+                style={{ background: `${board.color}20`, color: board.color }}
+              >
+                {board.progress}%
+              </span>
+              <ChevronDown
+                size={16}
+                className="shrink-0 text-muted transition-transform group-open:rotate-180"
+              />
+            </summary>
+
+            <div className="border-t border-line/60 p-4">
+              {board.lists.length === 0 ? (
+                <div className="rounded-lg bg-surface2/45 px-4 py-8 text-center">
+                  <ListChecks className="mx-auto text-muted" size={22} />
+                  <p className="mt-2 text-sm font-medium">No active lists</p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    This board has no list progress to report yet.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {board.lists.map((list) => (
+                    <ListProgressCard key={list.id} list={list} boardColor={board.color} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </details>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ListProgressCard({
+  list,
+  boardColor,
+}: {
+  list: ListProgress;
+  boardColor: string;
+}) {
+  const color = list.color || boardColor;
+  const isComplete = list.totalUnits > 0 && list.remainingUnits === 0;
+
+  return (
+    <article className="rounded-lg border border-line/60 bg-surface2/45 p-3.5">
+      <div className="flex items-start gap-2.5">
+        <span
+          className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
+          style={{ background: color }}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-3">
+            <h4 className="truncate text-sm font-semibold" title={list.title}>
+              {list.title}
+            </h4>
+            <span
+              className={cn(
+                'shrink-0 text-xs font-bold tabular-nums',
+                isComplete ? 'text-success' : list.totalUnits ? 'text-ink' : 'text-muted'
+              )}
+            >
+              {list.totalUnits ? `${list.progress}%` : 'No work'}
+            </span>
+          </div>
+
+          <div className="mt-2.5 h-2.5 overflow-hidden rounded-full bg-danger/14">
+            <div
+              className="h-full rounded-full transition-[width]"
+              style={{ width: `${list.progress}%`, background: color }}
+            />
+          </div>
+
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
+            <span className="font-medium text-success">
+              {formatCount(list.completedUnits)} done
+            </span>
+            <span className="font-medium text-danger">
+              {formatCount(list.remainingUnits)} remaining
+            </span>
+            <span className="text-muted">{formatCount(list.totalUnits)} total units</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-line/50 pt-3 text-center">
+        <ListMetric label="Cards" count={list.cards} />
+        <ListMetric label="Subtasks" count={list.subtasks} />
+        <ListMetric label="Checklist" count={list.checklistItems} />
+      </div>
+    </article>
+  );
+}
+
+function ListMetric({ label, count }: { label: string; count: WorkCount }) {
+  return (
+    <div className="min-w-0">
+      <p className="truncate text-[10px] uppercase tracking-wide text-muted">{label}</p>
+      <p className="mt-0.5 text-xs font-semibold tabular-nums">
+        {count.completed}/{count.total}
+      </p>
+    </div>
   );
 }
 

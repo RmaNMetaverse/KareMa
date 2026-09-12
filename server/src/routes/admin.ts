@@ -387,11 +387,43 @@ adminRouter.get('/boards', async (_req, res) => {
   res.json({ boards });
 });
 
+type ProgressCard = {
+  isComplete: boolean;
+  parentId: string | null;
+  checklists: { items: { isDone: boolean }[] }[];
+};
+
+function summariseProgress(cards: ProgressCard[]) {
+  const cardCompleted = cards.filter((card) => card.isComplete).length;
+  const subtasks = cards.filter((card) => card.parentId !== null);
+  const checklistItems = cards.flatMap((card) =>
+    card.checklists.flatMap((checklist) => checklist.items)
+  );
+  const checklistCompleted = checklistItems.filter((item) => item.isDone).length;
+  const totalUnits = cards.length + checklistItems.length;
+  const completedUnits = cardCompleted + checklistCompleted;
+
+  return {
+    progress: totalUnits ? Math.round((completedUnits / totalUnits) * 100) : 0,
+    totalUnits,
+    completedUnits,
+    remainingUnits: totalUnits - completedUnits,
+    cards: { total: cards.length, completed: cardCompleted },
+    subtasks: {
+      total: subtasks.length,
+      completed: subtasks.filter((card) => card.isComplete).length,
+    },
+    checklistItems: {
+      total: checklistItems.length,
+      completed: checklistCompleted,
+    },
+  };
+}
+
 /**
  * Instance-wide progress, weighted by concrete work units. Every active card
- * counts once (including subtask cards), and every checklist item counts once.
- * That keeps a board with substantial completed work from looking identical to
- * a board with one tiny card while avoiding counting subtasks twice.
+ * on an active list counts once (including subtask cards), and every checklist
+ * item counts once. The same calculation is returned for each individual list.
  */
 adminRouter.get('/board-progress', requirePermission('reports.view'), async (_req, res) => {
   const boards = await prisma.board.findMany({
@@ -402,13 +434,22 @@ adminRouter.get('/board-progress', requirePermission('reports.view'), async (_re
       title: true,
       color: true,
       icon: true,
-      cards: {
+      lists: {
         where: { isArchived: false },
+        orderBy: { position: 'asc' },
         select: {
-          isComplete: true,
-          parentId: true,
-          checklists: {
-            select: { items: { select: { isDone: true } } },
+          id: true,
+          title: true,
+          color: true,
+          cards: {
+            where: { isArchived: false },
+            select: {
+              isComplete: true,
+              parentId: true,
+              checklists: {
+                select: { items: { select: { isDone: true } } },
+              },
+            },
           },
         },
       },
@@ -416,35 +457,21 @@ adminRouter.get('/board-progress', requirePermission('reports.view'), async (_re
   });
 
   const progressBoards = boards.map((board) => {
-    const cardTotal = board.cards.length;
-    const cardCompleted = board.cards.filter((card) => card.isComplete).length;
-    const subtasks = board.cards.filter((card) => card.parentId !== null);
-    const checklistItems = board.cards.flatMap((card) =>
-      card.checklists.flatMap((checklist) => checklist.items)
-    );
-    const checklistCompleted = checklistItems.filter((item) => item.isDone).length;
-    const totalUnits = cardTotal + checklistItems.length;
-    const completedUnits = cardCompleted + checklistCompleted;
-    const remainingUnits = totalUnits - completedUnits;
+    const lists = board.lists.map((list) => ({
+      id: list.id,
+      title: list.title,
+      color: list.color,
+      ...summariseProgress(list.cards),
+    }));
+    const summary = summariseProgress(board.lists.flatMap((list) => list.cards));
 
     return {
       id: board.id,
       title: board.title,
       color: board.color,
       icon: board.icon,
-      progress: totalUnits ? Math.round((completedUnits / totalUnits) * 100) : 0,
-      totalUnits,
-      completedUnits,
-      remainingUnits,
-      cards: { total: cardTotal, completed: cardCompleted },
-      subtasks: {
-        total: subtasks.length,
-        completed: subtasks.filter((card) => card.isComplete).length,
-      },
-      checklistItems: {
-        total: checklistItems.length,
-        completed: checklistCompleted,
-      },
+      ...summary,
+      lists,
     };
   });
 
