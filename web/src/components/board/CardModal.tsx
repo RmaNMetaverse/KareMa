@@ -283,7 +283,7 @@ export function CardModal({ cardId, board, onClose, onChanged, onOpenCard }: Pro
               {canEdit && (
                 <div className="flex flex-wrap gap-1.5">
                   <MembersPicker card={card} people={people} onChanged={load} />
-                  <LabelsPicker card={card} board={board} onChanged={load} />
+                  <TagsPicker card={card} board={board} onChanged={load} />
                   <DatesPicker card={card} onUpdate={update} />
                   <PriorityPicker card={card} onUpdate={update} />
                   <CoverPicker card={card} images={images} onUpdate={update} onRefresh={load} />
@@ -333,7 +333,7 @@ export function CardModal({ cardId, board, onClose, onChanged, onOpenCard }: Pro
                   )}
 
                   {card.labels.length > 0 && (
-                    <Detail label="Labels">
+                    <Detail label="Tags">
                       <div className="flex flex-wrap gap-1.5">
                         {card.labels.map(({ label }: any) => (
                           <span
@@ -469,7 +469,9 @@ export function CardModal({ cardId, board, onClose, onChanged, onOpenCard }: Pro
                       <Checklist
                         key={cl.id}
                         cardId={card.id}
+                        boardId={board.id}
                         checklist={cl}
+                        boardTags={board.labels}
                         canEdit={canEdit}
                         onChanged={(next) => {
                           setCard(next);
@@ -778,12 +780,16 @@ function AddInline({
 
 function Checklist({
   cardId,
+  boardId,
   checklist,
+  boardTags,
   canEdit,
   onChanged,
 }: {
   cardId: string;
+  boardId: string;
   checklist: any;
+  boardTags: any[];
   canEdit: boolean;
   onChanged: (card: any) => void;
 }) {
@@ -802,6 +808,15 @@ function Checklist({
       <div className="flex items-center gap-2">
         <h4 className="flex-1 text-sm font-medium">{checklist.title}</h4>
         {canEdit && (
+          <ChecklistTagsPicker
+            cardId={cardId}
+            boardId={boardId}
+            checklist={checklist}
+            boardTags={boardTags}
+            onChanged={onChanged}
+          />
+        )}
+        {canEdit && (
           <button
             className="btn btn-ghost btn-icon"
             onClick={async () => {
@@ -814,6 +829,20 @@ function Checklist({
           </button>
         )}
       </div>
+
+      {checklist.tags?.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {checklist.tags.map(({ label: tag }: any) => (
+            <span
+              key={tag.id}
+              className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+              style={{ background: `${tag.color}2e`, color: tag.color }}
+            >
+              {tag.name || 'Unnamed'}
+            </span>
+          ))}
+        </div>
+      )}
 
       <ul className="mt-1.5 space-y-0.5">
         {checklist.items.map((item: any) => (
@@ -1048,23 +1077,26 @@ function MembersPicker({
   );
 }
 
-function LabelsPicker({ card, board, onChanged }: { card: any; board: any; onChanged: () => void }) {
+function TagsPicker({ card, board, onChanged }: { card: any; board: any; onChanged: () => void }) {
   const applied = new Set(card.labels.map((l: any) => l.label.id));
   return (
     <Popover
       width="w-60"
       trigger={({ toggle }) => (
         <button className="btn btn-subtle text-xs" onClick={toggle}>
-          <Tag size={14} /> Labels
+          <Tag size={14} /> Tags
         </button>
       )}
     >
+      <p className="px-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted">
+        Card tags
+      </p>
       <div className="max-h-64 space-y-1 overflow-y-auto">
         {board.labels.map((l: any) => (
           <button
             key={l.id}
             onClick={async () => {
-              await post(`/api/cards/${card.id}/labels/${l.id}`);
+              await post(`/api/cards/${card.id}/tags/${l.id}`);
               onChanged();
             }}
             className="flex w-full items-center gap-2 rounded-sm px-1.5 py-1.5 transition-colors hover:bg-surface3/60"
@@ -1078,8 +1110,165 @@ function LabelsPicker({ card, board, onChanged }: { card: any; board: any; onCha
             {applied.has(l.id) && <Check size={14} className="text-primary" />}
           </button>
         ))}
+        {board.labels.length === 0 && (
+          <p className="px-2 py-3 text-center text-xs text-muted">No tags yet.</p>
+        )}
       </div>
+      <CreateTagInline
+        boardId={board.id}
+        onCreated={async (tag) => {
+          await post(`/api/cards/${card.id}/tags/${tag.id}`);
+          onChanged();
+        }}
+      />
     </Popover>
+  );
+}
+
+function ChecklistTagsPicker({
+  cardId,
+  boardId,
+  checklist,
+  boardTags,
+  onChanged,
+}: {
+  cardId: string;
+  boardId: string;
+  checklist: any;
+  boardTags: any[];
+  onChanged: (card: any) => void;
+}) {
+  const applied = new Set((checklist.tags ?? []).map((relation: any) => relation.label.id));
+  return (
+    <Popover
+      align="right"
+      width="w-60"
+      trigger={({ toggle }) => (
+        <button className="btn btn-ghost px-2 py-1 text-[11px]" onClick={toggle}>
+          <Tag size={12} /> Tags
+        </button>
+      )}
+    >
+      <p className="px-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted">
+        Checklist tags
+      </p>
+      <div className="max-h-64 space-y-1 overflow-y-auto">
+        {boardTags.map((tag: any) => (
+          <button
+            key={tag.id}
+            onClick={async () => {
+              const res = await post<{ card: any }>(
+                `/api/cards/${cardId}/checklists/${checklist.id}/tags/${tag.id}`
+              );
+              onChanged(res.card);
+            }}
+            className="flex w-full items-center gap-2 rounded-sm px-1.5 py-1.5 transition-colors hover:bg-surface3/60"
+          >
+            <span
+              className="h-6 flex-1 rounded-sm px-2 text-left text-xs font-semibold leading-6"
+              style={{ background: `${tag.color}2e`, color: tag.color }}
+            >
+              {tag.name || 'Unnamed'}
+            </span>
+            {applied.has(tag.id) && <Check size={14} className="text-primary" />}
+          </button>
+        ))}
+        {boardTags.length === 0 && (
+          <p className="px-2 py-3 text-center text-xs text-muted">No tags yet.</p>
+        )}
+      </div>
+      <CreateTagInline
+        boardId={boardId}
+        onCreated={async (tag) => {
+          const res = await post<{ card: any }>(
+            `/api/cards/${cardId}/checklists/${checklist.id}/tags/${tag.id}`
+          );
+          onChanged(res.card);
+        }}
+      />
+    </Popover>
+  );
+}
+
+function CreateTagInline({
+  boardId,
+  onCreated,
+}: {
+  boardId: string;
+  onCreated: (tag: any) => Promise<void>;
+}) {
+  const { toast } = useApp();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [color, setColor] = useState('#6366f1');
+  const [saving, setSaving] = useState(false);
+
+  if (!open) {
+    return (
+      <div className="mt-2 border-t border-line/60 pt-2">
+        <button className="btn btn-ghost w-full justify-start py-1.5 text-xs" onClick={() => setOpen(true)}>
+          <Plus size={13} /> Create a new tag
+        </button>
+      </div>
+    );
+  }
+
+  const create = async () => {
+    const trimmed = name.trim();
+    if (!trimmed || saving) return;
+    setSaving(true);
+    try {
+      const res = await post<{ tag: any }>(`/api/boards/${boardId}/tags`, {
+        name: trimmed,
+        color,
+      });
+      await onCreated(res.tag);
+      setName('');
+      setOpen(false);
+      toast({ title: `${trimmed} created and applied`, tone: 'success' });
+    } catch (err: any) {
+      toast({ title: err.message || 'Could not create tag', tone: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-2 space-y-2 border-t border-line/60 pt-2">
+      <p className="px-1 text-[10px] font-semibold uppercase tracking-wide text-muted">
+        New board tag
+      </p>
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          value={color}
+          onChange={(event) => setColor(event.target.value)}
+          className="h-8 w-9 shrink-0 cursor-pointer rounded-sm border border-line bg-transparent"
+          aria-label="Tag colour"
+        />
+        <input
+          className="input min-w-0 py-1.5 text-xs"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              create();
+            }
+          }}
+          placeholder="Tag name"
+          autoFocus
+        />
+      </div>
+      <div className="flex justify-end gap-1">
+        <button className="btn btn-ghost py-1 text-xs" onClick={() => setOpen(false)} disabled={saving}>
+          Cancel
+        </button>
+        <button className="btn btn-primary py-1 text-xs" onClick={create} disabled={!name.trim() || saving}>
+          {saving ? <Spinner size={12} /> : <Plus size={12} />} Create & apply
+        </button>
+      </div>
+    </div>
   );
 }
 

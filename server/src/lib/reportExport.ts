@@ -12,6 +12,7 @@ const FONT = 'Arial';
 
 const LIST_HEADERS = [
   'List',
+  'Tags',
   'Progress',
   'Completed units',
   'Remaining units',
@@ -26,6 +27,7 @@ const LIST_HEADERS = [
 
 const BOARD_HEADERS = [
   'Board',
+  'Tags',
   'Progress',
   'Completed units',
   'Remaining units',
@@ -54,11 +56,11 @@ function metricRow(item: BoardProgress | ListProgress) {
 }
 
 function listRow(list: ListProgress) {
-  return [list.title, ...metricRow(list)];
+  return [list.title, list.tags.map((tag) => tag.name).join(', '), ...metricRow(list)];
 }
 
 function boardRow(board: BoardProgress) {
-  return [board.title, ...metricRow(board)];
+  return [board.title, board.tags.map((tag) => tag.name).join(', '), ...metricRow(board)];
 }
 
 function styleTitle(sheet: ExcelJS.Worksheet, title: string, lastColumn: number) {
@@ -84,8 +86,8 @@ function styleDataRows(
   sheet: ExcelJS.Worksheet,
   startRow: number,
   endRow: number,
-  progressColumn = 2,
-  lastColumn = 11
+  progressColumn = 3,
+  lastColumn = 12
 ) {
   if (endRow < startRow) return;
   for (let rowNumber = startRow; rowNumber <= endRow; rowNumber++) {
@@ -95,7 +97,10 @@ function styleDataRows(
     row.alignment = { vertical: 'middle' };
     row.eachCell((cell, column) => {
       cell.border = { bottom: { style: 'thin', color: { argb: LINE } } };
-      if (column > 1) cell.alignment = { horizontal: 'right', vertical: 'middle' };
+      cell.alignment = {
+        horizontal: column >= progressColumn ? 'right' : 'left',
+        vertical: 'middle',
+      };
       if (column === progressColumn) cell.numFmt = '0%';
       else if (column > progressColumn && column <= lastColumn) cell.numFmt = '#,##0';
     });
@@ -109,8 +114,9 @@ function styleDataRows(
 
 function setTableWidths(sheet: ExcelJS.Worksheet, firstLabel = 30) {
   sheet.getColumn(1).width = firstLabel;
-  sheet.getColumn(2).width = 12;
-  for (let column = 3; column <= 11; column++) sheet.getColumn(column).width = 17;
+  sheet.getColumn(2).width = 28;
+  sheet.getColumn(3).width = 12;
+  for (let column = 4; column <= 12; column++) sheet.getColumn(column).width = 17;
 }
 
 function addContext(
@@ -141,8 +147,12 @@ function addIndividualSheet(
     views: [{ showGridLines: false, state: 'frozen', ySplit: 10 }],
     pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
   });
-  styleTitle(sheet, `${board.title} progress report`, 11);
-  addContext(sheet, report.generatedAt, 11, board.title);
+  styleTitle(sheet, `${board.title} progress report`, 12);
+  addContext(sheet, report.generatedAt, 12, board.title);
+  sheet.mergeCells(5, 1, 5, 12);
+  const tags = sheet.getCell(5, 1);
+  tags.value = `Tags: ${board.tags.map((tag) => tag.name).join(', ') || 'None'}`;
+  tags.font = { name: FONT, size: 9, color: { argb: MUTED } };
 
   sheet.getRow(6).values = ['Progress', 'Completed units', 'Remaining units', 'Total units'];
   sheet.getRow(7).values = [
@@ -174,10 +184,10 @@ function addIndividualSheet(
   const lastDataRow = 10 + board.lists.length;
   styleDataRows(sheet, 11, lastDataRow);
   setTableWidths(sheet, 30);
-  sheet.autoFilter = { from: 'A10', to: `K${Math.max(lastDataRow, 10)}` };
+  sheet.autoFilter = { from: 'A10', to: `L${Math.max(lastDataRow, 10)}` };
 
   if (board.lists.length === 0) {
-    sheet.mergeCells('A11:K11');
+    sheet.mergeCells('A11:L11');
     const empty = sheet.getCell('A11');
     empty.value = 'No active lists';
     empty.font = { name: FONT, size: 10, italic: true, color: { argb: MUTED } };
@@ -190,22 +200,22 @@ function addFullReportSheets(workbook: ExcelJS.Workbook, report: BoardProgressRe
     views: [{ showGridLines: false, state: 'frozen', ySplit: 6 }],
     pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
   });
-  styleTitle(summary, 'Board progress report', 11);
-  addContext(summary, report.generatedAt, 11);
+  styleTitle(summary, 'Board progress report', 12);
+  addContext(summary, report.generatedAt, 12);
   summary.getRow(6).values = BOARD_HEADERS;
   styleHeader(summary.getRow(6));
   report.boards.forEach((board) => summary.addRow(boardRow(board)));
   const summaryLast = 6 + report.boards.length;
   styleDataRows(summary, 7, summaryLast);
   setTableWidths(summary, 30);
-  summary.autoFilter = { from: 'A6', to: `K${Math.max(summaryLast, 6)}` };
+  summary.autoFilter = { from: 'A6', to: `L${Math.max(summaryLast, 6)}` };
 
   const detail = workbook.addWorksheet('List detail', {
     views: [{ showGridLines: false, state: 'frozen', ySplit: 6 }],
     pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
   });
-  styleTitle(detail, 'List progress by board', 12);
-  addContext(detail, report.generatedAt, 12);
+  styleTitle(detail, 'List progress by board', 13);
+  addContext(detail, report.generatedAt, 13);
   detail.getRow(6).values = ['Board', ...LIST_HEADERS];
   styleHeader(detail.getRow(6));
   for (const board of report.boards) {
@@ -213,12 +223,13 @@ function addFullReportSheets(workbook: ExcelJS.Workbook, report: BoardProgressRe
   }
   const listCount = report.boards.reduce((sum, board) => sum + board.lists.length, 0);
   const detailLast = 6 + listCount;
-  styleDataRows(detail, 7, detailLast, 3, 12);
+  styleDataRows(detail, 7, detailLast, 4, 13);
   detail.getColumn(1).width = 30;
   detail.getColumn(2).width = 30;
-  detail.getColumn(3).width = 12;
-  for (let column = 4; column <= 12; column++) detail.getColumn(column).width = 17;
-  detail.autoFilter = { from: 'A6', to: `L${Math.max(detailLast, 6)}` };
+  detail.getColumn(3).width = 28;
+  detail.getColumn(4).width = 12;
+  for (let column = 5; column <= 13; column++) detail.getColumn(column).width = 17;
+  detail.autoFilter = { from: 'A6', to: `M${Math.max(detailLast, 6)}` };
 }
 
 export async function createProgressXlsx(
@@ -246,6 +257,7 @@ function csvCell(value: unknown) {
 export function createProgressCsv(report: BoardProgressReport, board?: BoardProgress) {
   const headers = [
     'Board',
+    'Board tags',
     'Board progress',
     'Board completed units',
     'Board remaining units',
@@ -258,15 +270,22 @@ export function createProgressCsv(report: BoardProgressReport, board?: BoardProg
   for (const item of selected) {
     const boardCells = [
       item.title,
+      item.tags.map((tag) => tag.name).join(', '),
       `${item.progress}%`,
       item.completedUnits,
       item.remainingUnits,
       item.totalUnits,
     ];
-    if (item.lists.length === 0) rows.push([...boardCells, '', '', '', '', '', '', '', '', '', '', '']);
+    if (item.lists.length === 0) rows.push([...boardCells, ...LIST_HEADERS.map(() => '')]);
     else {
       for (const list of item.lists) {
-        rows.push([...boardCells, list.title, `${list.progress}%`, ...metricRow(list).slice(1)]);
+        rows.push([
+          ...boardCells,
+          list.title,
+          list.tags.map((tag) => tag.name).join(', '),
+          `${list.progress}%`,
+          ...metricRow(list).slice(1),
+        ]);
       }
     }
   }

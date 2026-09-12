@@ -904,7 +904,7 @@ function FilterMenu({
         </div>
 
         <p className="flex items-center gap-2 px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">
-          <Tag size={12} /> Labels
+          <Tag size={12} /> Tags
         </p>
         <div className="mb-2 flex flex-wrap gap-1.5 px-2">
           {board.labels.map((l) => (
@@ -977,7 +977,7 @@ function FilterMenu({
           Hide completed cards
         </MenuItem>
         <MenuItem active={compactLabels} onClick={() => setCompactLabels(!compactLabels)}>
-          Compact labels
+          Compact tags
         </MenuItem>
         {count > 0 && (
           <>

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
+  ArrowUpDown,
+  Check,
   CheckCircle2,
   ChevronDown,
   ClipboardCheck,
@@ -10,12 +12,14 @@ import {
   PieChart,
   RefreshCw,
   SquareKanban,
+  Tag,
   TriangleAlert,
+  X,
 } from 'lucide-react';
 import { downloadApiFile, get } from '../../lib/api';
 import { cn } from '../../lib/utils';
 import { useApp } from '../../store/app';
-import { Spinner } from '../ui';
+import { Popover, Spinner } from '../ui';
 
 type WorkCount = { total: number; completed: number };
 
@@ -29,10 +33,13 @@ type ProgressMetrics = {
   checklistItems: WorkCount;
 };
 
+type ReportTag = { id: string; name: string; color: string };
+
 type ListProgress = ProgressMetrics & {
   id: string;
   title: string;
   color?: string | null;
+  tags: ReportTag[];
 };
 
 type BoardProgress = ProgressMetrics & {
@@ -40,6 +47,7 @@ type BoardProgress = ProgressMetrics & {
   title: string;
   color: string;
   icon?: string | null;
+  tags: ReportTag[];
   lists: ListProgress[];
 };
 
@@ -54,8 +62,11 @@ type ProgressReport = {
     completeBoards: number;
     emptyBoards: number;
   };
+  tags: ReportTag[];
   boards: BoardProgress[];
 };
+
+type ReportSort = 'progress-desc' | 'progress-asc' | 'remaining-desc' | 'name-asc' | 'tag-asc';
 
 const PIE_COLORS = [
   'hsl(var(--primary))',
@@ -76,6 +87,9 @@ export function BoardProgressReport() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState('');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [tagMode, setTagMode] = useState<'any' | 'all'>('any');
+  const [sort, setSort] = useState<ReportSort>('progress-desc');
 
   const load = async () => {
     setLoading(true);
@@ -99,8 +113,11 @@ export function BoardProgressReport() {
     setExporting(key);
     try {
       const boardQuery = board ? `&boardId=${encodeURIComponent(board.id)}` : '';
+      const tagQuery = selectedTags.length
+        ? `&tagIds=${encodeURIComponent(selectedTags.join(','))}&tagMode=${tagMode}`
+        : '';
       await downloadApiFile(
-        `/api/admin/board-progress/export?format=${format}${boardQuery}`
+        `/api/admin/board-progress/export?format=${format}${boardQuery}${tagQuery}&sort=${sort}`
       );
       toast({
         title: board ? `${board.title} report exported` : 'Board progress report exported',
@@ -131,7 +148,8 @@ export function BoardProgressReport() {
 
   if (!report) return null;
 
-  const { totals, boards } = report;
+  const boards = filterAndSortBoards(report.boards, selectedTags, tagMode, sort);
+  const totals = calculateTotals(boards);
 
   return (
     <div className="space-y-5">
@@ -171,6 +189,18 @@ export function BoardProgressReport() {
         </div>
       </div>
 
+      <ReportControls
+        tags={report.tags}
+        selectedTags={selectedTags}
+        onSelectedTags={setSelectedTags}
+        tagMode={tagMode}
+        onTagMode={setTagMode}
+        sort={sort}
+        onSort={setSort}
+        resultCount={boards.length}
+        totalCount={report.boards.length}
+      />
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard
           label="Overall progress"
@@ -189,7 +219,7 @@ export function BoardProgressReport() {
         <SummaryCard
           label="Work remaining"
           value={formatCount(totals.remainingUnits)}
-          hint="across all active boards"
+          hint="across the boards shown"
           icon={<ListChecks size={18} />}
           tone="warning"
         />
@@ -209,8 +239,14 @@ export function BoardProgressReport() {
       {boards.length === 0 ? (
         <div className="glass rounded-xl px-5 py-14 text-center">
           <SquareKanban className="mx-auto text-muted" size={28} />
-          <h3 className="mt-3 text-sm font-semibold">No active boards yet</h3>
-          <p className="mt-1 text-xs text-muted">Board progress will appear here once work begins.</p>
+          <h3 className="mt-3 text-sm font-semibold">
+            {selectedTags.length ? 'No boards match these tags' : 'No active boards yet'}
+          </h3>
+          <p className="mt-1 text-xs text-muted">
+            {selectedTags.length
+              ? 'Try removing a tag or switching from match all to match any.'
+              : 'Board progress will appear here once work begins.'}
+          </p>
         </div>
       ) : (
         <>
@@ -224,6 +260,178 @@ export function BoardProgressReport() {
       )}
     </div>
   );
+}
+
+function ReportControls({
+  tags,
+  selectedTags,
+  onSelectedTags,
+  tagMode,
+  onTagMode,
+  sort,
+  onSort,
+  resultCount,
+  totalCount,
+}: {
+  tags: ReportTag[];
+  selectedTags: string[];
+  onSelectedTags: (ids: string[]) => void;
+  tagMode: 'any' | 'all';
+  onTagMode: (mode: 'any' | 'all') => void;
+  sort: ReportSort;
+  onSort: (sort: ReportSort) => void;
+  resultCount: number;
+  totalCount: number;
+}) {
+  const selected = new Set(selectedTags);
+  const toggle = (id: string) =>
+    onSelectedTags(selected.has(id) ? selectedTags.filter((item) => item !== id) : [...selectedTags, id]);
+
+  return (
+    <div className="glass flex flex-wrap items-center gap-2 rounded-xl p-3">
+      <Popover
+        width="w-72"
+        trigger={({ toggle: open }) => (
+          <button className={cn('btn', selectedTags.length ? 'btn-solid' : 'btn-subtle')} onClick={open}>
+            <Tag size={14} />
+            Tags
+            {selectedTags.length > 0 && (
+              <span className="rounded-full bg-white/25 px-1.5 text-[11px] font-semibold">
+                {selectedTags.length}
+              </span>
+            )}
+          </button>
+        )}
+      >
+        <div className="flex items-center justify-between gap-2 px-1.5 pb-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            Filter by tags
+          </p>
+          {selectedTags.length > 0 && (
+            <button className="text-[11px] font-medium text-primary" onClick={() => onSelectedTags([])}>
+              Clear
+            </button>
+          )}
+        </div>
+        <div className="max-h-64 space-y-1 overflow-y-auto">
+          {tags.map((tag) => (
+            <button
+              key={tag.id}
+              className="flex w-full items-center gap-2 rounded-sm px-1.5 py-1.5 hover:bg-surface3/60"
+              onClick={() => toggle(tag.id)}
+            >
+              <span
+                className="h-6 min-w-0 flex-1 truncate rounded-sm px-2 text-left text-xs font-semibold leading-6"
+                style={{ background: `${tag.color}2e`, color: tag.color }}
+              >
+                {tag.name || 'Unnamed'}
+              </span>
+              {selected.has(tag.id) && <Check size={14} className="shrink-0 text-primary" />}
+            </button>
+          ))}
+          {tags.length === 0 && <p className="px-2 py-3 text-center text-xs text-muted">No tags in use yet.</p>}
+        </div>
+      </Popover>
+
+      {selectedTags.length > 1 && (
+        <div className="flex rounded-md bg-surface2/70 p-0.5 text-xs">
+          {(['any', 'all'] as const).map((mode) => (
+            <button
+              key={mode}
+              className={cn(
+                'rounded-sm px-2.5 py-1.5 font-medium capitalize transition-colors',
+                tagMode === mode ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'
+              )}
+              onClick={() => onTagMode(mode)}
+            >
+              Match {mode}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <label className="ml-auto flex items-center gap-2 text-xs text-muted">
+        <ArrowUpDown size={13} />
+        <span className="hidden sm:inline">Sort</span>
+        <select className="input w-auto py-1.5 text-xs text-ink" value={sort} onChange={(event) => onSort(event.target.value as ReportSort)}>
+          <option value="progress-desc">Progress: high to low</option>
+          <option value="progress-asc">Progress: low to high</option>
+          <option value="remaining-desc">Remaining work</option>
+          <option value="name-asc">Board name</option>
+          <option value="tag-asc">Tag name</option>
+        </select>
+      </label>
+
+      <span className="w-full text-[11px] text-muted sm:w-auto">
+        Showing {resultCount} of {totalCount} {totalCount === 1 ? 'board' : 'boards'}
+      </span>
+
+      {selectedTags.length > 0 && (
+        <div className="order-last flex w-full flex-wrap gap-1 border-t border-line/50 pt-2">
+          {selectedTags.map((id) => {
+            const tag = tags.find((item) => item.id === id);
+            if (!tag) return null;
+            return (
+              <button
+                key={tag.id}
+                className="chip"
+                style={{ background: `${tag.color}2e`, color: tag.color }}
+                onClick={() => toggle(tag.id)}
+              >
+                {tag.name || 'Unnamed'} <X size={11} />
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function filterAndSortBoards(
+  boards: BoardProgress[],
+  selectedTags: string[],
+  tagMode: 'any' | 'all',
+  sort: ReportSort
+) {
+  const filtered = boards.filter((board) => {
+    if (!selectedTags.length) return true;
+    const ids = new Set(board.tags.map((tag) => tag.id));
+    return tagMode === 'all'
+      ? selectedTags.every((id) => ids.has(id))
+      : selectedTags.some((id) => ids.has(id));
+  });
+  return [...filtered].sort((a, b) => {
+    if (sort === 'progress-asc') return a.progress - b.progress || a.title.localeCompare(b.title);
+    if (sort === 'remaining-desc') return b.remainingUnits - a.remainingUnits || a.title.localeCompare(b.title);
+    if (sort === 'name-asc') return a.title.localeCompare(b.title);
+    if (sort === 'tag-asc') {
+      const aTag = a.tags[0]?.name;
+      const bTag = b.tags[0]?.name;
+      if (!aTag && bTag) return 1;
+      if (aTag && !bTag) return -1;
+      return (aTag ?? '').localeCompare(bTag ?? '') || a.title.localeCompare(b.title);
+    }
+    return b.progress - a.progress || b.totalUnits - a.totalUnits || a.title.localeCompare(b.title);
+  });
+}
+
+function calculateTotals(boards: BoardProgress[]) {
+  const sums = boards.reduce(
+    (total, board) => ({
+      totalUnits: total.totalUnits + board.totalUnits,
+      completedUnits: total.completedUnits + board.completedUnits,
+      remainingUnits: total.remainingUnits + board.remainingUnits,
+    }),
+    { totalUnits: 0, completedUnits: 0, remainingUnits: 0 }
+  );
+  return {
+    ...sums,
+    progress: sums.totalUnits ? Math.round((sums.completedUnits / sums.totalUnits) * 100) : 0,
+    boards: boards.length,
+    completeBoards: boards.filter((board) => board.totalUnits > 0 && board.remainingUnits === 0).length,
+    emptyBoards: boards.filter((board) => board.totalUnits === 0).length,
+  };
 }
 
 function SummaryCard({
@@ -272,7 +480,7 @@ function ProgressBarChart({ boards }: { boards: BoardProgress[] }) {
           </span>
           <div>
             <h3 className="text-sm font-semibold">Progress by board</h3>
-            <p className="text-[11px] text-muted">Highest completion percentage first</p>
+            <p className="text-[11px] text-muted">Board completion in the selected report order</p>
           </div>
         </div>
       </div>
@@ -459,6 +667,7 @@ function BoardBreakdown({ boards }: { boards: BoardProgress[] }) {
           <thead>
             <tr className="border-b border-line/70 text-left text-xs uppercase tracking-wide text-muted">
               <th className="px-4 py-3 font-semibold">Board</th>
+              <th className="px-4 py-3 font-semibold">Tags</th>
               <th className="px-4 py-3 font-semibold">Progress</th>
               <th className="px-4 py-3 font-semibold">Cards</th>
               <th className="px-4 py-3 font-semibold">Subtasks</th>
@@ -479,6 +688,9 @@ function BoardBreakdown({ boards }: { boards: BoardProgress[] }) {
                     </span>
                     <span className="max-w-48 truncate">{board.title}</span>
                   </Link>
+                </td>
+                <td className="px-4 py-3">
+                  <ReportTagChips tags={board.tags} />
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex min-w-32 items-center gap-2">
@@ -564,6 +776,7 @@ function ListProgressByBoard({
                     {board.completedUnits}/{board.totalUnits} units
                   </span>
                 </div>
+                {board.tags.length > 0 && <ReportTagChips tags={board.tags} limit={4} />}
               </div>
               <span
                 className="chip shrink-0 font-semibold tabular-nums"
@@ -669,6 +882,12 @@ function ListProgressCard({
             />
           </div>
 
+          {list.tags.length > 0 && (
+            <div className="mt-2">
+              <ReportTagChips tags={list.tags} limit={5} />
+            </div>
+          )}
+
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
             <span className="font-medium text-success">
               {formatCount(list.completedUnits)} done
@@ -687,6 +906,29 @@ function ListProgressCard({
         <ListMetric label="Checklist" count={list.checklistItems} />
       </div>
     </article>
+  );
+}
+
+function ReportTagChips({ tags, limit = 3 }: { tags: ReportTag[]; limit?: number }) {
+  const visible = tags.slice(0, limit);
+  return (
+    <div className="mt-1 flex max-w-64 flex-wrap gap-1">
+      {visible.map((tag) => (
+        <span
+          key={tag.id}
+          className="max-w-28 truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+          style={{ background: `${tag.color}2e`, color: tag.color }}
+          title={tag.name || 'Unnamed'}
+        >
+          {tag.name || 'Unnamed'}
+        </span>
+      ))}
+      {tags.length > limit && (
+        <span className="rounded-full bg-surface3 px-1.5 py-0.5 text-[10px] text-muted">
+          +{tags.length - limit}
+        </span>
+      )}
+    </div>
   );
 }
 

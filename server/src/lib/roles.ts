@@ -27,8 +27,8 @@ export const PERMISSIONS = [
   },
   {
     key: 'labels.manage',
-    label: 'Manage label presets',
-    description: 'Edit the labels every new board starts with.',
+    label: 'Manage tag presets',
+    description: 'Edit the tags every new board starts with.',
   },
   {
     key: 'boards.create',

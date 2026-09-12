@@ -13,6 +13,7 @@ import {
   Search,
   Shield,
   SquareKanban,
+  Tag,
   Trash2,
   UserCog,
   UserPlus,
@@ -23,7 +24,7 @@ import { useApp } from '../store/app';
 import { cn, formatBytes, formatDate, timeAgo } from '../lib/utils';
 import { PRESET_PRIMARIES } from '../lib/theme';
 import { UserReviewPanel } from '../components/admin/UserReviewPanel';
-import { LabelPresetsCard, Role, RolesTab } from '../components/admin/RolesTab';
+import { Role, RolesTab, TagPresetsCard } from '../components/admin/RolesTab';
 import { BoardProgressReport } from '../components/admin/BoardProgressReport';
 import {
   Avatar,
@@ -39,6 +40,7 @@ const TABS = [
   { id: 'overview', label: 'Overview', icon: <Activity size={16} />, permission: 'admin.access' },
   { id: 'users', label: 'Users', icon: <Users size={16} />, permission: 'users.manage' },
   { id: 'roles', label: 'Roles', icon: <ShieldCheck size={16} />, permission: 'roles.manage' },
+  { id: 'tags', label: 'Default tags', icon: <Tag size={16} />, permission: 'labels.manage' },
   { id: 'boards', label: 'Boards', icon: <LayoutGrid size={16} />, permission: 'admin.access' },
   { id: 'reports', label: 'Reports', icon: <BarChart3 size={16} />, permission: 'reports.view' },
 ];
@@ -86,12 +88,8 @@ export function AdminPage() {
       <div className="py-6">
         {tab === 'overview' && <Overview />}
         {tab === 'users' && <UsersTab />}
-        {tab === 'roles' && (
-          <div className="space-y-6">
-            <RolesTab />
-            <LabelPresetsCard />
-          </div>
-        )}
+        {tab === 'roles' && <RolesTab />}
+        {tab === 'tags' && user?.permissions?.['labels.manage'] && <TagPresetsCard />}
         {tab === 'boards' && <BoardsTab />}
         {tab === 'reports' && user?.permissions?.['reports.view'] && <BoardProgressReport />}
       </div>

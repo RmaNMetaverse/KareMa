@@ -126,7 +126,7 @@ async function seedWelcomeBoard(adminId: string) {
       listId: start.id,
       title: 'Open a card to see what it can hold',
       description:
-        'A card can carry:\n\n- A description with **bold**, *italic*, `code` and lists\n- Assignees, labels, a priority and dates\n- Checklists\n- Image, video and file attachments (drag files straight onto the card)\n- Comments, where typing @ mentions a teammate',
+        'A card can carry:\n\n- A description with **bold**, *italic*, `code` and lists\n- Assignees, multiple tags, a priority and dates\n- Checklists with their own tags\n- Image, video and file attachments (drag files straight onto the card)\n- Comments, where typing @ mentions a teammate',
     },
     {
       listId: start.id,

@@ -127,7 +127,7 @@ function MyCardRow({ card }: { card: any }) {
               className="chip"
               style={{ background: `${label.color}2e`, color: label.color }}
             >
-              {label.name || 'Label'}
+              {label.name || 'Tag'}
             </span>
           ))}
         </div>

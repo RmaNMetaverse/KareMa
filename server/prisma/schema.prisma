@@ -182,6 +182,7 @@ model Label {
   color   String
   board   Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
   cards   CardLabel[]
+  checklists ChecklistTag[]
 
   @@index([boardId])
 }
@@ -203,6 +204,20 @@ model Checklist {
   position Float
   card     Card   @relation(fields: [cardId], references: [id], onDelete: Cascade)
   items    ChecklistItem[]
+  tags     ChecklistTag[]
+}
+
+// Labels are retained as the underlying storage model for backwards compatibility.
+// In the product these records are exposed as tags.
+model ChecklistTag {
+  id          String    @id @default(cuid())
+  checklistId String
+  labelId     String
+  checklist   Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  label       Label     @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@unique([checklistId, labelId])
+  @@index([labelId])
 }
 
 model ChecklistItem {

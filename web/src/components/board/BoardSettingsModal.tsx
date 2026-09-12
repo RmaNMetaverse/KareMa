@@ -22,7 +22,7 @@ import { CoverCropper } from './CoverCropper';
 const TABS = [
   { id: 'general', label: 'General', icon: <Settings2 size={15} /> },
   { id: 'members', label: 'Members', icon: <Users size={15} /> },
-  { id: 'labels', label: 'Labels', icon: <Tag size={15} /> },
+  { id: 'tags', label: 'Tags', icon: <Tag size={15} /> },
 ] as const;
 
 const ROLES = ['ADMIN', 'MEMBER', 'VIEWER'] as const;
@@ -46,7 +46,7 @@ export function BoardSettingsModal({
   const [isPublic, setIsPublic] = useState(board.isPublic);
   const [directory, setDirectory] = useState<any[]>([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [newLabel, setNewLabel] = useState({ name: '', color: '#6366f1' });
+  const [newTag, setNewTag] = useState({ name: '', color: '#6366f1' });
   const [headerImage, setHeaderImage] = useState<string | null>(board.headerImage ?? null);
   const [pendingHeader, setPendingHeader] = useState<File | null>(null);
   const [headerUploading, setHeaderUploading] = useState(false);
@@ -436,7 +436,7 @@ export function BoardSettingsModal({
           </div>
         )}
 
-        {tab === 'labels' && (
+        {tab === 'tags' && (
           <div className="space-y-4">
             <div className="space-y-1.5">
               {board.labels.map((l: any) => (
@@ -445,7 +445,7 @@ export function BoardSettingsModal({
                     type="color"
                     value={l.color}
                     onChange={async (e) => {
-                      await patch(`/api/boards/${board.id}/labels/${l.id}`, {
+                      await patch(`/api/boards/${board.id}/tags/${l.id}`, {
                         color: e.target.value,
                       });
                       onChanged();
@@ -455,10 +455,10 @@ export function BoardSettingsModal({
                   <input
                     className="input py-1.5 text-sm"
                     defaultValue={l.name}
-                    placeholder="Label name"
+                    placeholder="Tag name"
                     onBlur={async (e) => {
                       if (e.target.value !== l.name) {
-                        await patch(`/api/boards/${board.id}/labels/${l.id}`, {
+                        await patch(`/api/boards/${board.id}/tags/${l.id}`, {
                           name: e.target.value,
                         });
                         onChanged();
@@ -468,7 +468,7 @@ export function BoardSettingsModal({
                   <button
                     className="btn btn-ghost btn-icon text-muted hover:text-danger"
                     onClick={async () => {
-                      await del(`/api/boards/${board.id}/labels/${l.id}`);
+                      await del(`/api/boards/${board.id}/tags/${l.id}`);
                       onChanged();
                     }}
                   >
@@ -481,23 +481,27 @@ export function BoardSettingsModal({
             <div className="flex items-center gap-2 border-t border-line/60 pt-4">
               <input
                 type="color"
-                value={newLabel.color}
-                onChange={(e) => setNewLabel((s) => ({ ...s, color: e.target.value }))}
+                value={newTag.color}
+                onChange={(e) => setNewTag((s) => ({ ...s, color: e.target.value }))}
                 className="h-8 w-10 cursor-pointer rounded-sm border border-line bg-transparent"
               />
               <input
                 className="input py-1.5 text-sm"
-                placeholder="New label name"
-                value={newLabel.name}
-                onChange={(e) => setNewLabel((s) => ({ ...s, name: e.target.value }))}
+                placeholder="New tag name"
+                value={newTag.name}
+                onChange={(e) => setNewTag((s) => ({ ...s, name: e.target.value }))}
               />
               <button
                 className="btn btn-primary py-1.5 text-xs"
                 onClick={async () => {
-                  await post(`/api/boards/${board.id}/labels`, newLabel);
-                  setNewLabel({ name: '', color: '#6366f1' });
+                  await post(`/api/boards/${board.id}/tags`, {
+                    ...newTag,
+                    name: newTag.name.trim(),
+                  });
+                  setNewTag({ name: '', color: '#6366f1' });
                   onChanged();
                 }}
+                disabled={!newTag.name.trim()}
               >
                 <Plus size={14} /> Add
               </button>

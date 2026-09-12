@@ -36,7 +36,10 @@ export const cardInclude = {
     orderBy: { position: 'asc' as const },
   },
   checklists: {
-    include: { items: { orderBy: { position: 'asc' as const } } },
+    include: {
+      items: { orderBy: { position: 'asc' as const } },
+      tags: { include: { label: true } },
+    },
     orderBy: { position: 'asc' as const },
   },
   attachments: {

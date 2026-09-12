@@ -387,26 +387,34 @@ cardsRouter.delete('/:id/assignees/:userId', async (req, res) => {
   res.json({ card: updated });
 });
 
-/* ------------------------------------------------------------------ labels */
+/* -------------------------------------------------------------------- tags */
 
-cardsRouter.post('/:id/labels/:labelId', async (req, res) => {
+async function toggleCardTag(req: any, res: any) {
   const { card, access } = await cardAccess(req, req.params.id);
   if (!card) return res.status(404).json({ error: 'Card not found' });
   if (!access?.canEdit) return res.status(403).json({ error: 'You cannot edit this board' });
 
+  const tagId = req.params.tagId ?? req.params.labelId;
+  const tag = await prisma.label.findFirst({ where: { id: tagId, boardId: card.boardId } });
+  if (!tag) return res.status(404).json({ error: 'Tag not found on this board' });
+
   const existing = await prisma.cardLabel.findUnique({
-    where: { cardId_labelId: { cardId: card.id, labelId: req.params.labelId } },
+    where: { cardId_labelId: { cardId: card.id, labelId: tagId } },
   });
   if (existing) {
     await prisma.cardLabel.delete({ where: { id: existing.id } });
   } else {
-    await prisma.cardLabel.create({ data: { cardId: card.id, labelId: req.params.labelId } });
+    await prisma.cardLabel.create({ data: { cardId: card.id, labelId: tagId } });
   }
 
   const updated = await fullCard(card.id);
   emitBoard(card.boardId, 'card:updated', updated);
   res.json({ card: updated });
-});
+}
+
+cardsRouter.post('/:id/tags/:tagId', toggleCardTag);
+// Legacy endpoint kept so older clients continue to work.
+cardsRouter.post('/:id/labels/:labelId', toggleCardTag);
 
 /* -------------------------------------------------------------- checklists */
 
@@ -441,6 +449,42 @@ cardsRouter.delete('/:id/checklists/:checklistId', async (req, res) => {
   if (!access?.canEdit) return res.status(403).json({ error: 'You cannot edit this board' });
 
   await prisma.checklist.delete({ where: { id: req.params.checklistId } }).catch(() => null);
+  const updated = await fullCard(card.id);
+  emitBoard(card.boardId, 'card:updated', updated);
+  res.json({ card: updated });
+});
+
+cardsRouter.post('/:id/checklists/:checklistId/tags/:tagId', async (req, res) => {
+  const { card, access } = await cardAccess(req, req.params.id);
+  if (!card) return res.status(404).json({ error: 'Card not found' });
+  if (!access?.canEdit) return res.status(403).json({ error: 'You cannot edit this board' });
+
+  const [checklist, tag] = await Promise.all([
+    prisma.checklist.findFirst({
+      where: { id: req.params.checklistId, cardId: card.id },
+      select: { id: true },
+    }),
+    prisma.label.findFirst({
+      where: { id: req.params.tagId, boardId: card.boardId },
+      select: { id: true },
+    }),
+  ]);
+  if (!checklist) return res.status(404).json({ error: 'Checklist not found on this card' });
+  if (!tag) return res.status(404).json({ error: 'Tag not found on this board' });
+
+  const existing = await prisma.checklistTag.findUnique({
+    where: {
+      checklistId_labelId: { checklistId: checklist.id, labelId: tag.id },
+    },
+  });
+  if (existing) {
+    await prisma.checklistTag.delete({ where: { id: existing.id } });
+  } else {
+    await prisma.checklistTag.create({
+      data: { checklistId: checklist.id, labelId: tag.id },
+    });
+  }
+
   const updated = await fullCard(card.id);
   emitBoard(card.boardId, 'card:updated', updated);
   res.json({ card: updated });

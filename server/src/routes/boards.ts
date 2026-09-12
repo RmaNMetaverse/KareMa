@@ -12,7 +12,7 @@ import { uploadImage, removeStoredFile, storedNameFromUrl } from '../lib/upload'
 export const boardsRouter = Router();
 boardsRouter.use(requireAuth);
 
-const DEFAULT_LABELS = [
+const DEFAULT_TAGS = [
   { name: 'Bug', color: '#ef4444' },
   { name: 'Feature', color: '#22c55e' },
   { name: 'Design', color: '#a855f7' },
@@ -21,11 +21,11 @@ const DEFAULT_LABELS = [
   { name: 'Polish', color: '#eab308' },
 ];
 
-/** New boards start with whatever label set an administrator configured. */
-async function labelPresets() {
+/** New boards start with whatever tag set an administrator configured. */
+async function tagPresets() {
   const row = await prisma.setting.findUnique({ where: { key: 'labelPresets' } });
   const value = row?.value as { name: string; color: string }[] | undefined;
-  if (!Array.isArray(value) || value.length === 0) return DEFAULT_LABELS;
+  if (!Array.isArray(value)) return DEFAULT_TAGS;
   return value
     .filter((l) => l && typeof l.color === 'string')
     .map((l) => ({ name: String(l.name ?? '').slice(0, 60), color: l.color }))
@@ -86,7 +86,7 @@ boardsRouter.post('/', async (req, res) => {
       icon: parsed.data.icon,
       createdById: req.user!.id,
       members: { create: { userId: req.user!.id, role: 'OWNER' } },
-      labels: { create: await labelPresets() },
+      labels: { create: await tagPresets() },
       ...(parsed.data.withStarterLists === false
         ? {}
         : {
@@ -365,42 +365,58 @@ boardsRouter.delete('/:id/members/:userId', async (req, res) => {
   res.json({ ok: true });
 });
 
-/* ------------------------------------------------------------------- labels */
+/* --------------------------------------------------------------------- tags */
 
-boardsRouter.post('/:id/labels', async (req, res) => {
+boardsRouter.post(['/:id/tags', '/:id/labels'], async (req, res) => {
   const access = await getBoardAccess(req.user!, req.params.id);
   if (!access?.canEdit) return res.status(403).json({ error: 'You cannot edit this board' });
 
   const parsed = z
-    .object({ name: z.string().max(60).default(''), color: z.string().max(32) })
+    .object({ name: z.string().trim().min(1).max(60), color: z.string().max(32) })
     .safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: 'Invalid label' });
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid tag' });
 
-  const label = await prisma.label.create({ data: { ...parsed.data, boardId: req.params.id } });
-  emitBoard(req.params.id, 'label:created', label);
-  res.status(201).json({ label });
+  const tag = await prisma.label.create({ data: { ...parsed.data, boardId: req.params.id } });
+  emitBoard(req.params.id, 'label:created', tag);
+  emitBoard(req.params.id, 'tag:created', tag);
+  res.status(201).json({ tag, label: tag });
 });
 
-boardsRouter.patch('/:id/labels/:labelId', async (req, res) => {
+boardsRouter.patch(['/:id/tags/:tagId', '/:id/labels/:tagId'], async (req, res) => {
   const access = await getBoardAccess(req.user!, req.params.id);
   if (!access?.canEdit) return res.status(403).json({ error: 'You cannot edit this board' });
 
   const parsed = z
-    .object({ name: z.string().max(60).optional(), color: z.string().max(32).optional() })
+    .object({
+      name: z.string().trim().min(1).max(60).optional(),
+      color: z.string().max(32).optional(),
+    })
     .safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: 'Invalid label' });
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid tag' });
 
-  const label = await prisma.label.update({ where: { id: req.params.labelId }, data: parsed.data });
-  emitBoard(req.params.id, 'label:updated', label);
-  res.json({ label });
+  const existing = await prisma.label.findFirst({
+    where: { id: req.params.tagId, boardId: req.params.id },
+    select: { id: true },
+  });
+  if (!existing) return res.status(404).json({ error: 'Tag not found on this board' });
+  const tag = await prisma.label.update({ where: { id: req.params.tagId }, data: parsed.data });
+  emitBoard(req.params.id, 'label:updated', tag);
+  emitBoard(req.params.id, 'tag:updated', tag);
+  res.json({ tag, label: tag });
 });
 
-boardsRouter.delete('/:id/labels/:labelId', async (req, res) => {
+boardsRouter.delete(['/:id/tags/:tagId', '/:id/labels/:tagId'], async (req, res) => {
   const access = await getBoardAccess(req.user!, req.params.id);
   if (!access?.canEdit) return res.status(403).json({ error: 'You cannot edit this board' });
 
-  await prisma.label.delete({ where: { id: req.params.labelId } });
-  emitBoard(req.params.id, 'label:deleted', { id: req.params.labelId });
+  const existing = await prisma.label.findFirst({
+    where: { id: req.params.tagId, boardId: req.params.id },
+    select: { id: true },
+  });
+  if (!existing) return res.status(404).json({ error: 'Tag not found on this board' });
+  await prisma.label.delete({ where: { id: req.params.tagId } });
+  emitBoard(req.params.id, 'label:deleted', { id: req.params.tagId });
+  emitBoard(req.params.id, 'tag:deleted', { id: req.params.tagId });
   res.json({ ok: true });
 });
 

@@ -203,7 +203,7 @@ export function BoardListView({
                     </button>
                   </th>
                 ))}
-                <th className="w-24 px-3 py-2.5 font-semibold">Labels</th>
+                <th className="w-24 px-3 py-2.5 font-semibold">Tags</th>
                 <th className="w-16 px-3 py-2.5" />
               </tr>
             </thead>
@@ -435,7 +435,7 @@ export function BoardListView({
                             className="chip"
                             style={{ background: `${label.color}2e`, color: label.color }}
                           >
-                            {label.name || 'Label'}
+                            {label.name || 'Tag'}
                           </span>
                         ))}
                         {card.labels.length > 2 && (

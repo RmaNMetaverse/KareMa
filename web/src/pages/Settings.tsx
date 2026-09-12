@@ -99,7 +99,7 @@ function Appearance() {
             <button className="btn btn-primary">Primary action</button>
             <button className="btn btn-subtle">Secondary</button>
             <button className="btn btn-ghost">Ghost</button>
-            <span className="chip bg-primary/16 text-primary">Label</span>
+            <span className="chip bg-primary/16 text-primary">Tag</span>
             <span className="chip bg-success/16 text-success">Done</span>
             <span className="chip bg-danger/16 text-danger">Overdue</span>
           </div>

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { hashPassword, requireAuth, requirePermission } from '../lib/auth';
 import { publicUser } from '../lib/selects';
-import { getBoardProgressReport } from '../lib/boardProgress';
+import { filterBoardProgressReport, getBoardProgressReport } from '../lib/boardProgress';
 import { createProgressCsv, createProgressXlsx, safeReportFilename } from '../lib/reportExport';
 import {
   ALL_PERMISSIONS,
@@ -321,7 +321,7 @@ async function countAdministratorsOutside(roleId: string) {
   return users.filter((u) => can(permissionsOf(u), 'users.manage')).length;
 }
 
-/* ---------------------------------------------------------- label presets */
+/* ------------------------------------------------------------ tag presets */
 
 const DEFAULT_LABEL_PRESETS = [
   { name: 'Bug', color: '#ef4444' },
@@ -332,17 +332,17 @@ const DEFAULT_LABEL_PRESETS = [
   { name: 'Polish', color: '#eab308' },
 ];
 
-adminRouter.get('/label-presets', async (_req, res) => {
+adminRouter.get(['/tag-presets', '/label-presets'], async (_req, res) => {
   const row = await prisma.setting.findUnique({ where: { key: 'labelPresets' } });
   res.json({ presets: (row?.value as any) ?? DEFAULT_LABEL_PRESETS });
 });
 
-adminRouter.put('/label-presets', requirePermission('labels.manage'), async (req, res) => {
+adminRouter.put(['/tag-presets', '/label-presets'], requirePermission('labels.manage'), async (req, res) => {
   const parsed = z
-    .array(z.object({ name: z.string().max(60), color: z.string().max(32) }))
+    .array(z.object({ name: z.string().trim().min(1).max(60), color: z.string().max(32) }))
     .max(30)
     .safeParse(req.body?.presets);
-  if (!parsed.success) return res.status(400).json({ error: 'Invalid label presets' });
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid tag presets' });
 
   await prisma.setting.upsert({
     where: { key: 'labelPresets' },
@@ -403,11 +403,19 @@ adminRouter.get('/board-progress/export', requirePermission('reports.view'), asy
     .object({
       format: z.enum(['csv', 'xlsx']),
       boardId: z.string().min(1).optional(),
+      tagIds: z.string().optional(),
+      tagMode: z.enum(['any', 'all']).optional(),
+      sort: z.enum(['progress-desc', 'progress-asc', 'remaining-desc', 'name-asc', 'tag-asc']).optional(),
     })
     .safeParse(req.query);
   if (!parsed.success) return res.status(400).json({ error: 'Choose CSV or XLSX format' });
 
-  const report = await getBoardProgressReport();
+  const unfiltered = await getBoardProgressReport();
+  const report = filterBoardProgressReport(unfiltered, {
+    tagIds: parsed.data.tagIds?.split(',').filter(Boolean),
+    tagMode: parsed.data.tagMode,
+    sort: parsed.data.sort,
+  });
   const board = parsed.data.boardId
     ? report.boards.find((item) => item.id === parsed.data.boardId)
     : undefined;

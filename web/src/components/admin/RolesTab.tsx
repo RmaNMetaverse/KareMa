@@ -342,25 +342,29 @@ function RoleFormModal({
   );
 }
 
-/* ------------------------------------------------------------ label presets */
+/* -------------------------------------------------------------- tag presets */
 
-export function LabelPresetsCard() {
+export function TagPresetsCard() {
   const { toast } = useApp();
   const [presets, setPresets] = useState<{ name: string; color: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    get<{ presets: any[] }>('/api/admin/label-presets')
+    get<{ presets: any[] }>('/api/admin/tag-presets')
       .then((r) => setPresets(r.presets))
       .finally(() => setLoading(false));
   }, []);
 
   const save = async (next: { name: string; color: string }[]) => {
-    setPresets(next);
+    const cleaned = next.map((tag, index) => ({
+      ...tag,
+      name: tag.name.trim() || `Tag ${index + 1}`,
+    }));
+    setPresets(cleaned);
     setSaving(true);
     try {
-      await put('/api/admin/label-presets', { presets: next });
+      await put('/api/admin/tag-presets', { presets: cleaned });
     } catch (err: any) {
       toast({ title: err.message, tone: 'error' });
     } finally {
@@ -371,60 +375,69 @@ export function LabelPresetsCard() {
   if (loading) return <div className="skeleton h-48" />;
 
   return (
-    <div className="glass rounded-xl p-4">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div>
-          <h3 className="text-sm font-semibold">Label presets</h3>
-          <p className="mt-0.5 text-xs text-muted">
-            The labels every new board starts with. Existing boards are left alone.
-          </p>
-        </div>
-        {saving && <Spinner size={14} />}
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-bold tracking-tight">Default tags</h2>
+        <p className="mt-1 max-w-2xl text-sm text-muted">
+          Set the reusable tags created automatically on every new board. Changing this list does
+          not alter existing boards.
+        </p>
       </div>
-
-      <div className="space-y-1.5">
-        {presets.map((label, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <input
-              type="color"
-              value={label.color}
-              onChange={(e) => {
-                const next = [...presets];
-                next[i] = { ...next[i], color: e.target.value };
-                save(next);
-              }}
-              className="h-8 w-10 shrink-0 cursor-pointer rounded-sm border border-line bg-transparent"
-            />
-            <input
-              className="input py-1.5 text-sm"
-              value={label.name}
-              placeholder="Label name"
-              onChange={(e) => {
-                const next = [...presets];
-                next[i] = { ...next[i], name: e.target.value };
-                setPresets(next);
-              }}
-              onBlur={() => save(presets)}
-            />
-            <button
-              className="btn btn-ghost btn-icon shrink-0 text-muted hover:text-danger"
-              onClick={() => save(presets.filter((_, idx) => idx !== i))}
-              aria-label={`Remove ${label.name}`}
-            >
-              <Trash2 size={15} />
-            </button>
+      <div className="glass rounded-xl p-4">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-semibold">Tag presets</h3>
+            <p className="mt-0.5 text-xs text-muted">
+              The tags every new board starts with. Existing boards are left alone.
+            </p>
           </div>
-        ))}
-      </div>
+          {saving && <Spinner size={14} />}
+        </div>
 
-      <button
-        className="btn btn-subtle mt-3 py-1 text-xs"
-        onClick={() => save([...presets, { name: 'New label', color: '#6366f1' }])}
-        disabled={presets.length >= 30}
-      >
-        <Plus size={14} />
-        Add a preset
-      </button>
+        <div className="space-y-1.5">
+          {presets.map((tag, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input
+                type="color"
+                value={tag.color}
+                onChange={(e) => {
+                  const next = [...presets];
+                  next[i] = { ...next[i], color: e.target.value };
+                  save(next);
+                }}
+                className="h-8 w-10 shrink-0 cursor-pointer rounded-sm border border-line bg-transparent"
+              />
+              <input
+                className="input py-1.5 text-sm"
+                value={tag.name}
+                placeholder="Tag name"
+                onChange={(e) => {
+                  const next = [...presets];
+                  next[i] = { ...next[i], name: e.target.value };
+                  setPresets(next);
+                }}
+                onBlur={() => save(presets)}
+              />
+              <button
+                className="btn btn-ghost btn-icon shrink-0 text-muted hover:text-danger"
+                onClick={() => save(presets.filter((_, idx) => idx !== i))}
+                aria-label={`Remove ${tag.name}`}
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <button
+          className="btn btn-subtle mt-3 py-1 text-xs"
+          onClick={() => save([...presets, { name: 'New tag', color: '#6366f1' }])}
+          disabled={presets.length >= 30}
+        >
+          <Plus size={14} />
+          Add a preset
+        </button>
+      </div>
     </div>
   );
 }

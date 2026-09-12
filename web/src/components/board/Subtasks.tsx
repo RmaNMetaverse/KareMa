@@ -184,7 +184,7 @@ export function Subtasks({
                   className="chip hidden shrink-0 sm:inline-flex"
                   style={{ background: `${label.color}2e`, color: label.color }}
                 >
-                  {label.name || 'Label'}
+                  {label.name || 'Tag'}
                 </span>
               ))}
 

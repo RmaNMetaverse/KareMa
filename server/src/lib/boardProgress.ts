@@ -12,10 +12,17 @@ export type ProgressMetrics = {
   checklistItems: WorkCount;
 };
 
+export type ReportTag = {
+  id: string;
+  name: string;
+  color: string;
+};
+
 export type ListProgress = ProgressMetrics & {
   id: string;
   title: string;
   color: string | null;
+  tags: ReportTag[];
 };
 
 export type BoardProgress = ProgressMetrics & {
@@ -23,6 +30,7 @@ export type BoardProgress = ProgressMetrics & {
   title: string;
   color: string;
   icon: string | null;
+  tags: ReportTag[];
   lists: ListProgress[];
 };
 
@@ -37,13 +45,24 @@ export type BoardProgressReport = {
     completeBoards: number;
     emptyBoards: number;
   };
+  tags: ReportTag[];
   boards: BoardProgress[];
 };
 
 type ProgressCard = {
   isComplete: boolean;
   parentId: string | null;
-  checklists: { items: { isDone: boolean }[] }[];
+  labels: { label: ReportTag }[];
+  checklists: {
+    items: { isDone: boolean }[];
+    tags: { label: ReportTag }[];
+  }[];
+};
+
+export type ReportFilterOptions = {
+  tagIds?: string[];
+  tagMode?: 'any' | 'all';
+  sort?: 'progress-desc' | 'progress-asc' | 'remaining-desc' | 'name-asc' | 'tag-asc';
 };
 
 function summariseProgress(cards: ProgressCard[]): ProgressMetrics {
@@ -73,6 +92,72 @@ function summariseProgress(cards: ProgressCard[]): ProgressMetrics {
   };
 }
 
+function collectTags(cards: ProgressCard[]): ReportTag[] {
+  const tags = new Map<string, ReportTag>();
+  for (const card of cards) {
+    for (const relation of card.labels) tags.set(relation.label.id, relation.label);
+    for (const checklist of card.checklists) {
+      for (const relation of checklist.tags) tags.set(relation.label.id, relation.label);
+    }
+  }
+  return [...tags.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function reportTotals(boards: BoardProgress[]) {
+  const totals = boards.reduce(
+    (sum, board) => ({
+      totalUnits: sum.totalUnits + board.totalUnits,
+      completedUnits: sum.completedUnits + board.completedUnits,
+      remainingUnits: sum.remainingUnits + board.remainingUnits,
+    }),
+    { totalUnits: 0, completedUnits: 0, remainingUnits: 0 }
+  );
+  return {
+    ...totals,
+    progress: totals.totalUnits
+      ? Math.round((totals.completedUnits / totals.totalUnits) * 100)
+      : 0,
+    boards: boards.length,
+    completeBoards: boards.filter(
+      (board) => board.totalUnits > 0 && board.remainingUnits === 0
+    ).length,
+    emptyBoards: boards.filter((board) => board.totalUnits === 0).length,
+  };
+}
+
+export function filterBoardProgressReport(
+  report: BoardProgressReport,
+  options: ReportFilterOptions = {}
+): BoardProgressReport {
+  const selected = [...new Set(options.tagIds ?? [])];
+  let boards = report.boards.filter((board) => {
+    if (!selected.length) return true;
+    const ids = new Set(board.tags.map((tag) => tag.id));
+    return options.tagMode === 'all'
+      ? selected.every((id) => ids.has(id))
+      : selected.some((id) => ids.has(id));
+  });
+
+  const sort = options.sort ?? 'progress-desc';
+  boards = [...boards].sort((a, b) => {
+    if (sort === 'progress-asc') return a.progress - b.progress || a.title.localeCompare(b.title);
+    if (sort === 'remaining-desc') {
+      return b.remainingUnits - a.remainingUnits || a.title.localeCompare(b.title);
+    }
+    if (sort === 'name-asc') return a.title.localeCompare(b.title);
+    if (sort === 'tag-asc') {
+      const aTag = a.tags[0]?.name;
+      const bTag = b.tags[0]?.name;
+      if (!aTag && bTag) return 1;
+      if (aTag && !bTag) return -1;
+      return (aTag ?? '').localeCompare(bTag ?? '') || a.title.localeCompare(b.title);
+    }
+    return b.progress - a.progress || b.totalUnits - a.totalUnits || a.title.localeCompare(b.title);
+  });
+
+  return { ...report, totals: reportTotals(boards), boards };
+}
+
 /** Build the shared data source used by the admin UI and file exports. */
 export async function getBoardProgressReport(): Promise<BoardProgressReport> {
   const boards = await prisma.board.findMany({
@@ -95,8 +180,14 @@ export async function getBoardProgressReport(): Promise<BoardProgressReport> {
             select: {
               isComplete: true,
               parentId: true,
+              labels: { select: { label: { select: { id: true, name: true, color: true } } } },
               checklists: {
-                select: { items: { select: { isDone: true } } },
+                select: {
+                  items: { select: { isDone: true } },
+                  tags: {
+                    select: { label: { select: { id: true, name: true, color: true } } },
+                  },
+                },
               },
             },
           },
@@ -110,44 +201,36 @@ export async function getBoardProgressReport(): Promise<BoardProgressReport> {
       id: list.id,
       title: list.title,
       color: list.color,
+      tags: collectTags(list.cards),
       ...summariseProgress(list.cards),
     }));
-    const summary = summariseProgress(board.lists.flatMap((list) => list.cards));
+    const cards = board.lists.flatMap((list) => list.cards);
+    const summary = summariseProgress(cards);
 
     return {
       id: board.id,
       title: board.title,
       color: board.color,
       icon: board.icon,
+      tags: collectTags(cards),
       ...summary,
       lists,
     };
   });
 
-  const totals = progressBoards.reduce(
-    (sum, board) => ({
-      totalUnits: sum.totalUnits + board.totalUnits,
-      completedUnits: sum.completedUnits + board.completedUnits,
-      remainingUnits: sum.remainingUnits + board.remainingUnits,
-    }),
-    { totalUnits: 0, completedUnits: 0, remainingUnits: 0 }
+  const tags = new Map<string, ReportTag>();
+  for (const board of progressBoards) {
+    for (const tag of board.tags) tags.set(tag.id, tag);
+  }
+
+  const sortedBoards = progressBoards.sort(
+    (a, b) => b.progress - a.progress || b.totalUnits - a.totalUnits
   );
 
   return {
     generatedAt: new Date().toISOString(),
-    totals: {
-      ...totals,
-      progress: totals.totalUnits
-        ? Math.round((totals.completedUnits / totals.totalUnits) * 100)
-        : 0,
-      boards: progressBoards.length,
-      completeBoards: progressBoards.filter(
-        (board) => board.totalUnits > 0 && board.remainingUnits === 0
-      ).length,
-      emptyBoards: progressBoards.filter((board) => board.totalUnits === 0).length,
-    },
-    boards: progressBoards.sort(
-      (a, b) => b.progress - a.progress || b.totalUnits - a.totalUnits
-    ),
+    totals: reportTotals(sortedBoards),
+    tags: [...tags.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    boards: sortedBoards,
   };
 }

@@ -41,15 +41,16 @@ machine in your office and takes one double-click to start.
 Drag cards between lists, drag lists to reorder them, and watch everyone else's changes
 land on your screen as they happen — no refresh, no lost work.
 
-- **Cards carry the whole story**: description, assignees, labels, priority, start and
-  due dates, checklists, attachments, comments and a full activity trail
+- **Cards carry the whole story**: description, assignees, multiple tags, priority, start and
+  due dates, checklists with their own tags, attachments, comments and a full activity trail.
+  Create a board tag directly from either the card or checklist tag picker and apply it immediately
 - **Card colours, colour and gradient covers, image covers** — normal or full-bleed.
   Upload a picture straight onto a card and crop it first: the cover is a short, wide
   strip, so you choose which part of the photo survives rather than letting it be
   centre-cropped for you
 - **Per-list WIP limits** that turn red when you go over, plus list colours, duplicate a
   list with its cards, and archive a whole list's cards at once
-- **Filter by** member, label, priority, due date or free text, with a live count of
+- **Filter by** member, tag, priority, due date or free text, with a live count of
   what is hidden
 - **Search everything** with `Ctrl` + `K` from anywhere
 - **My work** gathers every card assigned to you across all boards, grouped by urgency
@@ -65,7 +66,7 @@ with one click in the header. The list is not a read-only export — it is the s
 - **Change status or priority inline** from the row; changing status moves the card
   between lists exactly as dragging it would
 - **Sub-tasks nest under their parent** and fold away with a chevron
-- Card key (`#13`), comment and attachment counts, labels and avatars all in one line
+- Card key (`#13`), comment and attachment counts, tags and avatars all in one line
 - Your choice of view is remembered per board
 
 ### Cards inside cards
@@ -145,7 +146,7 @@ permissions:
 | `users.manage` | Create, edit, deactivate and delete people |
 | `roles.manage` | Add, edit and delete roles |
 | `reports.view` | View board progress reports and review anyone's work |
-| `labels.manage` | Edit the label presets |
+| `labels.manage` | Edit the tag presets (legacy permission key) |
 | `boards.create` | Create new boards |
 | `boards.viewAll` | See every board on the instance |
 | `boards.deleteAny` | Delete any board |
@@ -153,8 +154,8 @@ permissions:
 Board membership stays separate — that is still set per board as Owner, Admin, Member or
 Viewer. Changing a role takes effect on the next request, no re-login needed.
 
-The same tab holds the **label presets**: the labels every new board starts with, edited
-once instead of on every board.
+The admin panel has a dedicated **Default tags** tab: edit the tags every new board starts
+with once instead of configuring each board separately.
 
 New accounts can be handed a temporary password; that person is then required to choose
 their own the first time they sign in. The last active administrator can never be
@@ -176,7 +177,7 @@ and it follows your account to whatever machine you sign in from.
 
 - **Your own primary and secondary colours.** Pick from a palette or type any hex value.
   Everything else derives from them, including an automatic readable-text calculation so
-  labels on your colour stay legible.
+  tags on your colour stay legible.
 - **Liquid glass.** Frosted, translucent panels with a specular sheen along the top edge,
   with independent sliders for **blur**, **opacity** and **sheen** — or switch it off
   entirely for flat, fully opaque surfaces on older hardware.
