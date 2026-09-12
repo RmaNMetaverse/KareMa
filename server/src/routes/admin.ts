@@ -323,6 +323,34 @@ async function countAdministratorsOutside(roleId: string) {
 
 /* ------------------------------------------------------------ tag presets */
 
+const DEFAULT_LIST_PRESETS = [
+  { title: 'Backlog' },
+  { title: 'In Progress' },
+  { title: 'In Review' },
+  { title: 'Done' },
+];
+const listPresetsSchema = z
+  .array(z.object({ title: z.string().trim().min(1).max(120) }))
+  .max(30);
+
+adminRouter.get('/board-defaults', async (_req, res) => {
+  const row = await prisma.setting.findUnique({ where: { key: 'boardListPresets' } });
+  const stored = listPresetsSchema.safeParse(row?.value);
+  res.json({ lists: stored.success ? stored.data : DEFAULT_LIST_PRESETS });
+});
+
+adminRouter.put('/board-defaults', async (req, res) => {
+  const parsed = listPresetsSchema.safeParse(req.body?.lists);
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid default lists' });
+
+  await prisma.setting.upsert({
+    where: { key: 'boardListPresets' },
+    create: { key: 'boardListPresets', value: parsed.data as any },
+    update: { value: parsed.data as any },
+  });
+  res.json({ lists: parsed.data });
+});
+
 const DEFAULT_LABEL_PRESETS = [
   { name: 'Bug', color: '#ef4444' },
   { name: 'Feature', color: '#22c55e' },

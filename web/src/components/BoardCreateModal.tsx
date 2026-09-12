@@ -147,8 +147,8 @@ export function BoardCreateModal({
           <Switch
             checked={starter}
             onChange={setStarter}
-            label="Add starter lists"
-            description="Backlog, In Progress, In Review, Done"
+            label="Add default lists"
+            description="Uses the ordered list setup configured in Admin → Board defaults"
           />
         </div>
 

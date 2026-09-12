@@ -154,8 +154,8 @@ permissions:
 Board membership stays separate — that is still set per board as Owner, Admin, Member or
 Viewer. Changing a role takes effect on the next request, no re-login needed.
 
-The admin panel has a dedicated **Default tags** tab: edit the tags every new board starts
-with once instead of configuring each board separately.
+The admin panel has a dedicated **Board defaults** tab: configure the ordered lists and tags
+every new board starts with instead of setting up each board separately.
 
 New accounts can be handed a temporary password; that person is then required to choose
 their own the first time they sign in. The last active administrator can never be

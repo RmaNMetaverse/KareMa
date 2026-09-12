@@ -21,6 +21,13 @@ const DEFAULT_TAGS = [
   { name: 'Polish', color: '#eab308' },
 ];
 
+const DEFAULT_LISTS = [
+  { title: 'Backlog' },
+  { title: 'In Progress' },
+  { title: 'In Review' },
+  { title: 'Done' },
+];
+
 /** New boards start with whatever tag set an administrator configured. */
 async function tagPresets() {
   const row = await prisma.setting.findUnique({ where: { key: 'labelPresets' } });
@@ -29,6 +36,17 @@ async function tagPresets() {
   return value
     .filter((l) => l && typeof l.color === 'string')
     .map((l) => ({ name: String(l.name ?? '').slice(0, 60), color: l.color }))
+    .slice(0, 30);
+}
+
+/** New boards use this ordered list setup unless their creator opts out. */
+async function listPresets() {
+  const row = await prisma.setting.findUnique({ where: { key: 'boardListPresets' } });
+  const value = row?.value as { title: string }[] | undefined;
+  if (!Array.isArray(value)) return DEFAULT_LISTS;
+  return value
+    .filter((list) => list && typeof list.title === 'string' && list.title.trim())
+    .map((list) => ({ title: list.title.trim().slice(0, 120) }))
     .slice(0, 30);
 }
 
@@ -77,6 +95,7 @@ boardsRouter.post('/', async (req, res) => {
     .safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'A board title is required' });
 
+  const starterLists = parsed.data.withStarterLists === false ? [] : await listPresets();
   const board = await prisma.board.create({
     data: {
       title: parsed.data.title,
@@ -87,18 +106,16 @@ boardsRouter.post('/', async (req, res) => {
       createdById: req.user!.id,
       members: { create: { userId: req.user!.id, role: 'OWNER' } },
       labels: { create: await tagPresets() },
-      ...(parsed.data.withStarterLists === false
-        ? {}
-        : {
+      ...(starterLists.length
+        ? {
             lists: {
-              create: [
-                { title: 'Backlog', position: 1024 },
-                { title: 'In Progress', position: 2048 },
-                { title: 'In Review', position: 3072 },
-                { title: 'Done', position: 4096 },
-              ],
+              create: starterLists.map((list, index) => ({
+                title: list.title,
+                position: (index + 1) * 1024,
+              })),
             },
-          }),
+          }
+        : {}),
     },
     include: {
       createdBy: { select: publicUser },

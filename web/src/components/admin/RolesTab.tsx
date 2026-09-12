@@ -375,18 +375,10 @@ export function TagPresetsCard() {
   if (loading) return <div className="skeleton h-48" />;
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-bold tracking-tight">Default tags</h2>
-        <p className="mt-1 max-w-2xl text-sm text-muted">
-          Set the reusable tags created automatically on every new board. Changing this list does
-          not alter existing boards.
-        </p>
-      </div>
-      <div className="glass rounded-xl p-4">
+    <div className="glass rounded-xl p-4">
         <div className="mb-3 flex items-center justify-between gap-2">
           <div>
-            <h3 className="text-sm font-semibold">Tag presets</h3>
+            <h3 className="text-sm font-semibold">Default tags</h3>
             <p className="mt-0.5 text-xs text-muted">
               The tags every new board starts with. Existing boards are left alone.
             </p>
@@ -435,9 +427,8 @@ export function TagPresetsCard() {
           disabled={presets.length >= 30}
         >
           <Plus size={14} />
-          Add a preset
+          Add default tag
         </button>
-      </div>
     </div>
   );
 }
