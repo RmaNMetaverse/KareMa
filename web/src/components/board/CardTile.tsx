@@ -26,6 +26,7 @@ export type CardData = {
   dueDate?: string | null;
   startDate?: string | null;
   isComplete: boolean;
+  reviewStatus: 'OPEN' | 'IN_REVIEW' | 'APPROVED';
   number: number;
   assignees: { user: { id: string; name: string; avatarColor: string; avatarUrl?: string | null } }[];
   labels: { label: { id: string; name: string; color: string } }[];
@@ -212,8 +213,14 @@ export function CardTile({
             subtasks.length > 0 ||
             card.parentId ||
             card.description ||
-            priority?.value !== 'NONE') && (
+            priority?.value !== 'NONE' ||
+            card.reviewStatus === 'IN_REVIEW') && (
             <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
+              {card.reviewStatus === 'IN_REVIEW' && (
+                <span className="chip bg-warning/14 text-warning" title="Waiting for Supervisor approval">
+                  <Clock size={11} /> In review
+                </span>
+              )}
               {priority && priority.value !== 'NONE' && (
                 <span
                   className="chip"

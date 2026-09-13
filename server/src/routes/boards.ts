@@ -8,9 +8,24 @@ import { emitBoard } from '../lib/realtime';
 import { logActivity, notify } from '../lib/notify';
 import { listPosition } from '../lib/position';
 import { uploadImage, removeStoredFile, storedNameFromUrl } from '../lib/upload';
+import { invalidateBoardReview, supervisorIds } from '../lib/review';
 
 export const boardsRouter = Router();
 boardsRouter.use(requireAuth);
+
+async function boardCompletionBlockers(boardId: string) {
+  const [total, unfinished] = await Promise.all([
+    prisma.card.count({ where: { boardId, isArchived: false } }),
+    prisma.card.count({
+      where: {
+        boardId,
+        isArchived: false,
+        OR: [{ isComplete: false }, { reviewStatus: { not: 'APPROVED' } }],
+      },
+    }),
+  ]);
+  return { total, unfinished };
+}
 
 const DEFAULT_TAGS = [
   { name: 'Bug', color: '#ef4444' },
@@ -182,7 +197,104 @@ boardsRouter.patch('/:id', async (req, res) => {
     .safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid board data' });
 
-  const board = await prisma.board.update({ where: { id: req.params.id }, data: parsed.data });
+  const data: any = { ...parsed.data };
+  if (Object.keys(parsed.data).length > 0) {
+    data.isComplete = false;
+    data.reviewStatus = 'OPEN';
+    data.submittedForReviewAt = null;
+    data.submittedById = null;
+    data.reviewedAt = null;
+    data.reviewedById = null;
+  }
+  const board = await prisma.board.update({ where: { id: req.params.id }, data });
+  emitBoard(board.id, 'board:updated', board);
+  res.json({ board });
+});
+
+boardsRouter.post('/:id/submit-review', async (req, res) => {
+  const access = await getBoardAccess(req.user!, req.params.id);
+  if (!access?.canManage) return res.status(403).json({ error: 'You cannot submit this board' });
+
+  const current = await prisma.board.findUnique({ where: { id: req.params.id } });
+  if (!current) return res.status(404).json({ error: 'Board not found' });
+  const blockers = await boardCompletionBlockers(current.id);
+  if (blockers.total === 0) {
+    return res.status(400).json({ error: 'Add and approve at least one task before submitting the board' });
+  }
+  if (blockers.unfinished > 0) {
+    return res.status(400).json({
+      error: `Approve all tasks and subtasks first — ${blockers.unfinished} still ${blockers.unfinished === 1 ? 'needs' : 'need'} approval`,
+    });
+  }
+
+  const board = await prisma.board.update({
+    where: { id: current.id },
+    data: {
+      isComplete: false,
+      reviewStatus: 'IN_REVIEW',
+      submittedForReviewAt: new Date(),
+      submittedById: req.user!.id,
+      reviewedAt: null,
+      reviewedById: null,
+    },
+  });
+  await logActivity(board.id, req.user!.id, 'board.review.requested', { title: board.title });
+  await notify({
+    userIds: await supervisorIds(),
+    actorId: req.user!.id,
+    type: 'board.review',
+    message: `${req.user!.name} submitted the board "${board.title}" for review`,
+    boardId: board.id,
+  });
+  emitBoard(board.id, 'board:updated', board);
+  res.json({ board });
+});
+
+boardsRouter.post('/:id/review', async (req, res) => {
+  if (req.user!.roleKey !== 'supervisor') {
+    return res.status(403).json({ error: 'Only a Supervisor can review a board' });
+  }
+  const decision = z.enum(['approve', 'reject']).safeParse(req.body?.decision);
+  if (!decision.success) return res.status(400).json({ error: 'Choose approve or reject' });
+
+  const current = await prisma.board.findUnique({ where: { id: req.params.id } });
+  if (!current) return res.status(404).json({ error: 'Board not found' });
+  if (current.reviewStatus !== 'IN_REVIEW') {
+    return res.status(409).json({ error: 'This board is no longer waiting for review' });
+  }
+  if (decision.data === 'approve') {
+    const blockers = await boardCompletionBlockers(current.id);
+    if (blockers.total === 0 || blockers.unfinished > 0) {
+      return res.status(409).json({ error: 'The board changed and is no longer ready for approval' });
+    }
+  }
+
+  const board = await prisma.board.update({
+    where: { id: current.id },
+    data: {
+      isComplete: decision.data === 'approve',
+      reviewStatus: decision.data === 'approve' ? 'APPROVED' : 'OPEN',
+      reviewedAt: new Date(),
+      reviewedById: req.user!.id,
+    },
+  });
+  await logActivity(
+    board.id,
+    req.user!.id,
+    decision.data === 'approve' ? 'board.review.approved' : 'board.review.rejected',
+    { title: board.title }
+  );
+  const members = await prisma.boardMember.findMany({
+    where: { boardId: board.id },
+    select: { userId: true },
+  });
+  await notify({
+    userIds: [...members.map((member) => member.userId), ...(current.submittedById ? [current.submittedById] : [])],
+    actorId: req.user!.id,
+    type: 'board.review',
+    message: `${req.user!.name} ${decision.data === 'approve' ? 'approved' : 'returned'} the board "${board.title}"`,
+    boardId: board.id,
+  });
   emitBoard(board.id, 'board:updated', board);
   res.json({ board });
 });
@@ -208,7 +320,15 @@ boardsRouter.post('/:id/background', uploadImage.single('file'), async (req, res
   });
   const board = await prisma.board.update({
     where: { id: req.params.id },
-    data: { background: `/api/files/${req.file.filename}` },
+    data: {
+      background: `/api/files/${req.file.filename}`,
+      isComplete: false,
+      reviewStatus: 'OPEN',
+      submittedForReviewAt: null,
+      submittedById: null,
+      reviewedAt: null,
+      reviewedById: null,
+    },
   });
 
   removeStoredFile(storedNameFromUrl(current?.background));
@@ -227,7 +347,15 @@ boardsRouter.delete('/:id/background', async (req, res) => {
   });
   const board = await prisma.board.update({
     where: { id: req.params.id },
-    data: { background: null },
+    data: {
+      background: null,
+      isComplete: false,
+      reviewStatus: 'OPEN',
+      submittedForReviewAt: null,
+      submittedById: null,
+      reviewedAt: null,
+      reviewedById: null,
+    },
   });
 
   removeStoredFile(storedNameFromUrl(current?.background));
@@ -252,7 +380,15 @@ boardsRouter.post('/:id/header', uploadImage.single('file'), async (req, res) =>
   });
   const board = await prisma.board.update({
     where: { id: req.params.id },
-    data: { headerImage: `/api/files/${req.file.filename}` },
+    data: {
+      headerImage: `/api/files/${req.file.filename}`,
+      isComplete: false,
+      reviewStatus: 'OPEN',
+      submittedForReviewAt: null,
+      submittedById: null,
+      reviewedAt: null,
+      reviewedById: null,
+    },
   });
 
   removeStoredFile(storedNameFromUrl(current?.headerImage));
@@ -271,7 +407,15 @@ boardsRouter.delete('/:id/header', async (req, res) => {
   });
   const board = await prisma.board.update({
     where: { id: req.params.id },
-    data: { headerImage: null },
+    data: {
+      headerImage: null,
+      isComplete: false,
+      reviewStatus: 'OPEN',
+      submittedForReviewAt: null,
+      submittedById: null,
+      reviewedAt: null,
+      reviewedById: null,
+    },
   });
 
   removeStoredFile(storedNameFromUrl(current?.headerImage));
@@ -463,6 +607,7 @@ boardsRouter.post('/:id/lists', async (req, res) => {
       position,
     },
   });
+  await invalidateBoardReview(req.params.id);
   await logActivity(req.params.id, req.user!.id, 'list.created', { title: list.title });
   emitBoard(req.params.id, 'list:created', { ...list, cards: [] });
   res.status(201).json({ list: { ...list, cards: [] } });

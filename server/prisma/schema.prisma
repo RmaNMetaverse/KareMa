@@ -29,6 +29,12 @@ enum Priority {
   URGENT
 }
 
+enum ReviewStatus {
+  OPEN
+  IN_REVIEW
+  APPROVED
+}
+
 model User {
   id           String     @id @default(cuid())
   email        String     @unique
@@ -55,6 +61,10 @@ model User {
   notifications    Notification[] @relation("NotificationRecipient")
   actedNotifications Notification[] @relation("NotificationActor")
   createdCards     Card[]         @relation("CardCreator")
+  submittedCards   Card[]         @relation("CardSubmitter")
+  reviewedCards    Card[]         @relation("CardReviewer")
+  submittedBoards  Board[]        @relation("BoardSubmitter")
+  reviewedBoards   Board[]        @relation("BoardReviewer")
   ownedBoards      Board[]        @relation("BoardCreator")
   watches          CardWatcher[]
 }
@@ -69,6 +79,14 @@ model Board {
   icon        String?
   isArchived  Boolean  @default(false)
   isPublic    Boolean  @default(false)
+  isComplete  Boolean  @default(false)
+  reviewStatus ReviewStatus @default(OPEN)
+  submittedForReviewAt DateTime?
+  submittedById String?
+  submittedBy User? @relation("BoardSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
+  reviewedAt DateTime?
+  reviewedById String?
+  reviewedBy User? @relation("BoardReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
   position    Int      @default(0)
   createdById String
   createdBy   User     @relation("BoardCreator", fields: [createdById], references: [id])
@@ -81,6 +99,8 @@ model Board {
   labels     Label[]
   activities Activity[]
   notifications Notification[]
+
+  @@index([reviewStatus, submittedForReviewAt])
 }
 
 model BoardMember {
@@ -129,6 +149,13 @@ model Card {
   startDate   DateTime?
   dueDate     DateTime?
   isComplete  Boolean   @default(false)
+  reviewStatus ReviewStatus @default(OPEN)
+  submittedForReviewAt DateTime?
+  submittedById String?
+  submittedBy   User?     @relation("CardSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime?
+  reviewedById String?
+  reviewedBy   User?     @relation("CardReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
   isArchived  Boolean   @default(false)
   number      Int       @default(0)
   parentId    String?
@@ -153,6 +180,7 @@ model Card {
   @@index([listId])
   @@index([boardId])
   @@index([parentId])
+  @@index([reviewStatus, submittedForReviewAt])
 }
 
 model CardAssignee {
@@ -315,7 +343,7 @@ model Notification {
   @@index([userId, isRead])
 }
 
-/// A named bundle of instance-wide permissions. The three system roles cannot
+/// A named bundle of instance-wide permissions. The system roles cannot
 /// be deleted; administrators may add as many custom ones as they like.
 model Role {
   id          String   @id @default(cuid())

@@ -6,6 +6,7 @@ import { getBoardAccess } from '../lib/permissions';
 import { emitBoard } from '../lib/realtime';
 import { logActivity } from '../lib/notify';
 import { listPosition, cardPosition } from '../lib/position';
+import { invalidateBoardReview } from '../lib/review';
 
 export const listsRouter = Router();
 listsRouter.use(requireAuth);
@@ -34,6 +35,9 @@ listsRouter.patch('/:id', async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: 'Invalid list data' });
 
   const updated = await prisma.list.update({ where: { id: list.id }, data: parsed.data });
+  if (Object.keys(parsed.data).some((key) => key !== 'isCollapsed')) {
+    await invalidateBoardReview(list.boardId);
+  }
   emitBoard(list.boardId, 'list:updated', updated);
   res.json({ list: updated });
 });
@@ -49,6 +53,7 @@ listsRouter.patch('/:id/move', async (req, res) => {
 
   const position = await listPosition(list.boardId, index.data, list.id);
   const updated = await prisma.list.update({ where: { id: list.id }, data: { position } });
+  await invalidateBoardReview(list.boardId);
   emitBoard(list.boardId, 'list:moved', { id: list.id, position: updated.position });
   res.json({ list: updated });
 });
@@ -59,6 +64,7 @@ listsRouter.delete('/:id', async (req, res) => {
   if (!access?.canEdit) return res.status(403).json({ error: 'You cannot edit this board' });
 
   await prisma.list.delete({ where: { id: list.id } });
+  await invalidateBoardReview(list.boardId);
   await logActivity(list.boardId, req.user!.id, 'list.deleted', { title: list.title });
   emitBoard(list.boardId, 'list:deleted', { id: list.id });
   res.json({ ok: true });
@@ -71,6 +77,7 @@ listsRouter.post('/:id/archive-cards', async (req, res) => {
   if (!access?.canEdit) return res.status(403).json({ error: 'You cannot edit this board' });
 
   await prisma.card.updateMany({ where: { listId: list.id }, data: { isArchived: true } });
+  await invalidateBoardReview(list.boardId);
   emitBoard(list.boardId, 'list:cards-archived', { id: list.id });
   res.json({ ok: true });
 });
@@ -117,6 +124,7 @@ listsRouter.post('/:id/duplicate', async (req, res) => {
     });
   }
 
+  await invalidateBoardReview(list.boardId);
   emitBoard(list.boardId, 'board:refresh', { reason: 'list-duplicated' });
   res.status(201).json({ list: copy });
 });

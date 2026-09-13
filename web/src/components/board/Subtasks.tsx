@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, CornerDownRight, GitBranch, Link2Off, Plus, Search, Tag, X } from 'lucide-react';
+import { Check, Clock3, CornerDownRight, GitBranch, Link2Off, Plus, Search, Tag, X } from 'lucide-react';
 import { del, get, patch, post } from '../../lib/api';
 import { useApp } from '../../store/app';
 import { cn, dueState, formatDate, PRIORITIES } from '../../lib/utils';
@@ -10,6 +10,7 @@ type Summary = {
   title: string;
   number: number;
   isComplete: boolean;
+  reviewStatus: 'OPEN' | 'IN_REVIEW' | 'APPROVED';
   priority: string;
   dueDate?: string | null;
   assignees: { user: any }[];
@@ -150,20 +151,42 @@ export function Subtasks({
             >
               <button
                 disabled={!canEdit}
-                title={child.isComplete ? 'Mark as open' : 'Mark as complete'}
+                title={
+                  child.isComplete
+                    ? 'Reopen this subtask'
+                    : child.reviewStatus === 'IN_REVIEW'
+                      ? 'Cancel review request'
+                      : 'Submit this subtask for review'
+                }
                 onClick={async () => {
-                  await patch(`/api/cards/${child.id}`, { isComplete: !child.isComplete });
-                  onChanged();
+                  try {
+                    await patch(`/api/cards/${child.id}`, {
+                      isComplete: child.isComplete || child.reviewStatus === 'IN_REVIEW' ? false : true,
+                    });
+                    onChanged();
+                  } catch (err: any) {
+                    toast({ title: err.message || 'Could not update the subtask', tone: 'error' });
+                  }
                 }}
                 className={cn(
                   'grid h-4 w-4 shrink-0 place-items-center rounded-xs border-2 transition-colors',
                   child.isComplete
                     ? 'border-success bg-success text-white'
-                    : 'border-line hover:border-success'
+                    : child.reviewStatus === 'IN_REVIEW'
+                      ? 'border-warning bg-warning/16 text-warning'
+                      : 'border-line hover:border-success'
                 )}
               >
-                {child.isComplete && <Check size={10} strokeWidth={3} />}
+                {child.isComplete ? (
+                  <Check size={10} strokeWidth={3} />
+                ) : child.reviewStatus === 'IN_REVIEW' ? (
+                  <Clock3 size={10} strokeWidth={2.5} />
+                ) : null}
               </button>
+
+              {child.reviewStatus === 'IN_REVIEW' && (
+                <span className="chip shrink-0 bg-warning/14 text-[10px] text-warning">In review</span>
+              )}
 
               <button
                 onClick={() => onOpenCard?.(child.id)}

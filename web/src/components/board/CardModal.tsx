@@ -4,7 +4,9 @@ import {
   Archive,
   CalendarDays,
   Check,
+  CheckCircle2,
   CheckSquare,
+  Clock3,
   Copy,
   Eye,
   EyeOff,
@@ -19,6 +21,7 @@ import {
   Upload,
   UserPlus,
   X,
+  XCircle,
 } from 'lucide-react';
 import { del, get, patch, post, uploadFile } from '../../lib/api';
 import { useApp } from '../../store/app';
@@ -159,6 +162,21 @@ export function CardModal({ cardId, board, onClose, onChanged, onOpenCard }: Pro
     }
   };
 
+  const reviewCard = async (decision: 'approve' | 'reject') => {
+    try {
+      const res = await post<{ card: any }>(`/api/cards/${cardId}/review`, { decision });
+      setCard(res.card);
+      toast({
+        title: decision === 'approve' ? 'Work approved' : 'Work returned for changes',
+        tone: decision === 'approve' ? 'success' : 'info',
+      });
+      onChanged();
+    } catch (err: any) {
+      toast({ title: err.message || 'Could not save the review', tone: 'error' });
+      load();
+    }
+  };
+
   const images = (card?.attachments ?? []).filter((a: any) => a.kind === 'image');
   const due = dueState(card?.dueDate, card?.isComplete);
   const priority = PRIORITIES.find((p) => p.value === card?.priority);
@@ -224,16 +242,32 @@ export function CardModal({ cardId, board, onClose, onChanged, onOpenCard }: Pro
           <div className="flex items-start gap-3 px-5 pb-1 pt-4">
             {canEdit && (
               <button
-                onClick={() => update({ isComplete: !card.isComplete })}
+                onClick={() =>
+                  update({
+                    isComplete: card.isComplete || card.reviewStatus === 'IN_REVIEW' ? false : true,
+                  })
+                }
                 className={cn(
                   'mt-1 grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition-colors',
                   card.isComplete
                     ? 'border-success bg-success text-white'
-                    : 'border-line hover:border-success'
+                    : card.reviewStatus === 'IN_REVIEW'
+                      ? 'border-warning bg-warning/16 text-warning'
+                      : 'border-line hover:border-success'
                 )}
-                aria-label="Toggle complete"
+                aria-label={
+                  card.isComplete
+                    ? 'Reopen card'
+                    : card.reviewStatus === 'IN_REVIEW'
+                      ? 'Cancel review request'
+                      : 'Submit card for review'
+                }
               >
-                {card.isComplete && <Check size={12} strokeWidth={3} />}
+                {card.isComplete ? (
+                  <Check size={12} strokeWidth={3} />
+                ) : card.reviewStatus === 'IN_REVIEW' ? (
+                  <Clock3 size={11} strokeWidth={2.5} />
+                ) : null}
               </button>
             )}
             <div className="min-w-0 flex-1">
@@ -276,6 +310,23 @@ export function CardModal({ cardId, board, onClose, onChanged, onOpenCard }: Pro
               <X size={18} />
             </button>
           </div>
+
+          {card.reviewStatus === 'IN_REVIEW' && (
+            <div className="mx-5 mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+              <Clock3 size={14} className="shrink-0" />
+              <span className="min-w-0 flex-1 font-medium">Waiting for Supervisor approval</span>
+              {user?.roleRef?.key === 'supervisor' && (
+                <div className="flex gap-1.5">
+                  <button className="btn btn-subtle py-1 text-xs text-danger" onClick={() => reviewCard('reject')}>
+                    <XCircle size={13} /> Return
+                  </button>
+                  <button className="btn btn-primary py-1 text-xs" onClick={() => reviewCard('approve')}>
+                    <CheckCircle2 size={13} /> Approve
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="grid gap-5 px-5 pb-5 pt-3 md:grid-cols-[1fr_13rem]">
             {/* ------------------------------------------------------ main */}
@@ -1564,6 +1615,12 @@ function describeActivity(a: any) {
       return `moved it from ${d.from} to ${d.to}`;
     case 'card.completed':
       return 'marked it complete';
+    case 'card.review.requested':
+      return 'submitted it for Supervisor review';
+    case 'card.review.approved':
+      return 'approved it as complete';
+    case 'card.review.rejected':
+      return 'returned it for changes';
     case 'card.reopened':
       return 'reopened it';
     case 'card.archived':

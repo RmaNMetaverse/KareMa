@@ -118,9 +118,13 @@ export function RolesTab() {
               </div>
 
               <div className="mt-auto flex gap-1.5 pt-3">
-                <button className="btn btn-subtle py-1 text-xs" onClick={() => setEditing(role)}>
-                  Edit
-                </button>
+                {role.key === 'supervisor' ? (
+                  <span className="chip bg-surface3/60 text-muted">Fixed authority</span>
+                ) : (
+                  <button className="btn btn-subtle py-1 text-xs" onClick={() => setEditing(role)}>
+                    Edit
+                  </button>
+                )}
                 {!role.isSystem && (
                   <button
                     className="btn btn-ghost py-1 text-xs text-muted hover:text-danger"

@@ -51,8 +51,16 @@ export type PermissionKey = (typeof PERMISSIONS)[number]['key'];
 
 export const ALL_PERMISSIONS = PERMISSIONS.map((p) => p.key) as PermissionKey[];
 
-/** The three roles every instance starts with. They can be edited but not deleted. */
+/** The roles every instance starts with. They can be edited but not deleted. */
 export const SYSTEM_ROLES = [
+  {
+    key: 'supervisor',
+    name: 'Supervisor',
+    description: 'Final authority over the instance and the only role that can approve completed work.',
+    color: '#a855f7',
+    rank: -100,
+    permissions: Object.fromEntries(ALL_PERMISSIONS.map((k) => [k, true])),
+  },
   {
     key: 'administrator',
     name: 'Administrator',
@@ -87,6 +95,7 @@ export type PermissionMap = Partial<Record<PermissionKey, boolean>>;
 /** Create the system roles if they are missing, then attach anyone without one. */
 export async function ensureRoles() {
   for (const role of SYSTEM_ROLES) {
+    const fixedSupervisor = role.key === 'supervisor';
     await prisma.role.upsert({
       where: { key: role.key },
       create: {
@@ -98,14 +107,24 @@ export async function ensureRoles() {
         isSystem: true,
         permissions: role.permissions as any,
       },
-      // only top up the parts an administrator would not have customised
-      update: { isSystem: true },
+      // Other built-ins remain customisable. Supervisor is the fixed authority
+      // tier, so also repair its definition on existing installations.
+      update: fixedSupervisor
+        ? {
+            name: role.name,
+            description: role.description,
+            color: role.color,
+            rank: role.rank,
+            isSystem: true,
+            permissions: role.permissions as any,
+          }
+        : { isSystem: true },
     });
   }
 
   const roles = await prisma.role.findMany({ where: { isSystem: true } });
   const byLegacy = new Map(
-    SYSTEM_ROLES.map((r) => [r.legacy, roles.find((x) => x.key === r.key)!.id])
+    SYSTEM_ROLES.filter((r) => 'legacy' in r).map((r) => [r.legacy!, roles.find((x) => x.key === r.key)!.id])
   );
 
   // backfill anyone still on the legacy enum alone

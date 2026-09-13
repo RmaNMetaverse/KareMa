@@ -272,6 +272,10 @@ export function BoardListView({
                           {card.title}
                         </span>
 
+                        {card.reviewStatus === 'IN_REVIEW' && (
+                          <span className="chip shrink-0 bg-warning/14 text-[10px] text-warning">In review</span>
+                        )}
+
                         <span className="flex shrink-0 items-center gap-2 text-[11px] text-muted">
                           {row.childCount > 0 && (
                             <span title={`${row.childCount} subtasks`}>{row.childCount} sub</span>

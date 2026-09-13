@@ -10,6 +10,7 @@ import { emitBoard } from '../lib/realtime';
 import { cardAudience, logActivity, notify } from '../lib/notify';
 import { env } from '../lib/env';
 import { kindOf, removeStoredFile, uploadAny } from '../lib/upload';
+import { invalidateCardReview } from '../lib/review';
 
 export const attachmentsRouter = Router();
 attachmentsRouter.use(requireAuth);
@@ -71,6 +72,7 @@ attachmentsRouter.post('/', uploadAny.single('file'), async (req, res) => {
   }
 
   if (!commentId) {
+    await invalidateCardReview(card.id);
     await logActivity(
       card.boardId,
       req.user!.id,
@@ -125,6 +127,8 @@ attachmentsRouter.post('/link', async (req, res) => {
     include: { uploader: { select: publicUser } },
   });
 
+  if (!parsed.data.commentId) await invalidateCardReview(card.id);
+
   emitBoard(card.boardId, 'attachment:created', { cardId: card.id, attachment });
   res.status(201).json({ attachment });
 });
@@ -143,6 +147,7 @@ attachmentsRouter.delete('/:id', async (req, res) => {
 
   await prisma.attachment.delete({ where: { id: attachment.id } });
   removeStoredFile(attachment.storedName);
+  if (!attachment.commentId) await invalidateCardReview(card.id);
 
   // drop the cover if it pointed at this file
   if (

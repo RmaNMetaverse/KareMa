@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarClock, CheckCircle2, ListChecks } from 'lucide-react';
+import { CalendarClock, CheckCircle2, Clock3, ListChecks } from 'lucide-react';
 import { get } from '../lib/api';
 import { cn, dueState, formatDate, PRIORITIES } from '../lib/utils';
 import { EmptyState, Spinner } from '../components/ui';
 
 const GROUPS = [
+  { id: 'review', label: 'In review', tone: 'text-warning' },
   { id: 'overdue', label: 'Overdue', tone: 'text-danger' },
   { id: 'today', label: 'Due today', tone: 'text-warning' },
   { id: 'soon', label: 'Next few days', tone: 'text-warning' },
@@ -27,7 +28,7 @@ export function MyWork() {
   const grouped = useMemo(() => {
     const map: Record<string, any[]> = {};
     for (const card of cards) {
-      const state = dueState(card.dueDate, card.isComplete);
+      const state = card.reviewStatus === 'IN_REVIEW' ? 'review' : dueState(card.dueDate, card.isComplete);
       (map[state] ||= []).push(card);
     }
     return map;
@@ -100,6 +101,8 @@ function MyCardRow({ card }: { card: any }) {
     >
       {card.isComplete ? (
         <CheckCircle2 size={17} className="shrink-0 text-success" />
+      ) : card.reviewStatus === 'IN_REVIEW' ? (
+        <Clock3 size={17} className="shrink-0 text-warning" />
       ) : (
         <span
           className="h-2.5 w-2.5 shrink-0 rounded-full"
@@ -116,6 +119,12 @@ function MyCardRow({ card }: { card: any }) {
           {card.board.title}
           <span>·</span>
           {card.list.title}
+          {card.reviewStatus === 'IN_REVIEW' && (
+            <>
+              <span>·</span>
+              <span className="text-warning">waiting for approval</span>
+            </>
+          )}
         </p>
       </div>
 

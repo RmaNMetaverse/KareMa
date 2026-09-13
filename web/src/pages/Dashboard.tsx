@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Archive, Layers, Plus, SquareKanban, Star, Users } from 'lucide-react';
+import { Archive, CheckCircle2, Clock3, Layers, Plus, SquareKanban, Star, Users } from 'lucide-react';
 import { get, post } from '../lib/api';
 import { useApp } from '../store/app';
 import { cn, timeAgo } from '../lib/utils';
@@ -17,6 +17,8 @@ type Board = {
   icon?: string | null;
   starred: boolean;
   myRole: string;
+  isComplete: boolean;
+  reviewStatus: 'OPEN' | 'IN_REVIEW' | 'APPROVED';
   updatedAt: string;
   members: { user: { id: string; name: string; avatarColor: string; avatarUrl?: string | null } }[];
   _count: { cards: number; lists: number };
@@ -221,6 +223,16 @@ function BoardCard({
 
         <div className="mt-auto flex items-center justify-between gap-3 pt-3">
           <div className="flex items-center gap-3 text-[11px] text-muted">
+            {board.reviewStatus === 'IN_REVIEW' && (
+              <span className="chip bg-warning/14 text-warning">
+                <Clock3 size={11} /> In review
+              </span>
+            )}
+            {board.reviewStatus === 'APPROVED' && (
+              <span className="chip bg-success/14 text-success">
+                <CheckCircle2 size={11} /> Approved
+              </span>
+            )}
             <span className="flex items-center gap-1">
               <Layers size={12} />
               {board._count.cards}

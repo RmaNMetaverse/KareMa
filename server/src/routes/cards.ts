@@ -7,6 +7,7 @@ import { cardInclude, commentInclude, publicUser } from '../lib/selects';
 import { emitBoard } from '../lib/realtime';
 import { cardAudience, logActivity, notify } from '../lib/notify';
 import { cardPosition } from '../lib/position';
+import { invalidateBoardReview, invalidateCardReview, supervisorIds } from '../lib/review';
 
 export const cardsRouter = Router();
 cardsRouter.use(requireAuth);
@@ -19,6 +20,22 @@ async function cardAccess(req: any, cardId: string) {
 }
 
 const fullCard = (id: string) => prisma.card.findUnique({ where: { id }, include: cardInclude });
+
+async function completionBlockers(cardId: string) {
+  const [uncheckedItems, unfinishedSubtasks] = await Promise.all([
+    prisma.checklistItem.count({
+      where: { checklist: { cardId }, isDone: false },
+    }),
+    prisma.card.count({
+      where: {
+        parentId: cardId,
+        isArchived: false,
+        OR: [{ isComplete: false }, { reviewStatus: { not: 'APPROVED' } }],
+      },
+    }),
+  ]);
+  return { uncheckedItems, unfinishedSubtasks };
+}
 
 /** Cards assigned to me, across every board I can see. */
 cardsRouter.get('/mine', async (req, res) => {
@@ -73,6 +90,7 @@ cardsRouter.post('/', async (req, res) => {
   });
 
   const card = await fullCard(created.id);
+  await invalidateBoardReview(list.boardId);
   await logActivity(list.boardId, req.user!.id, 'card.created', { title: created.title }, created.id);
   emitBoard(list.boardId, 'card:created', card);
   res.status(201).json({ card });
@@ -164,10 +182,55 @@ cardsRouter.patch('/:id', async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: 'Invalid card data' });
 
   const data: any = { ...parsed.data };
+  let reviewInvalidated = false;
   if (data.startDate !== undefined) data.startDate = data.startDate ? new Date(data.startDate) : null;
   if (data.dueDate !== undefined) data.dueDate = data.dueDate ? new Date(data.dueDate) : null;
 
+  if (parsed.data.isComplete === true) {
+    const blockers = await completionBlockers(card.id);
+    if (blockers.uncheckedItems > 0 || blockers.unfinishedSubtasks > 0) {
+      const reasons = [
+        blockers.uncheckedItems > 0
+          ? `${blockers.uncheckedItems} unchecked checklist ${blockers.uncheckedItems === 1 ? 'item' : 'items'}`
+          : null,
+        blockers.unfinishedSubtasks > 0
+          ? `${blockers.unfinishedSubtasks} unfinished ${blockers.unfinishedSubtasks === 1 ? 'subtask' : 'subtasks'}`
+          : null,
+      ].filter(Boolean);
+      return res.status(400).json({ error: `Finish ${reasons.join(' and ')} before requesting review` });
+    }
+    data.isComplete = false;
+    data.reviewStatus = 'IN_REVIEW';
+    data.submittedForReviewAt = new Date();
+    data.submittedById = req.user!.id;
+    data.reviewedAt = null;
+    data.reviewedById = null;
+  } else if (parsed.data.isComplete === false) {
+    data.isComplete = false;
+    data.reviewStatus = 'OPEN';
+    data.submittedForReviewAt = null;
+    data.submittedById = null;
+    data.reviewedAt = null;
+    data.reviewedById = null;
+  } else if (
+    (card.isComplete || card.reviewStatus === 'IN_REVIEW') &&
+    Object.keys(parsed.data).length > 0
+  ) {
+    data.isComplete = false;
+    data.reviewStatus = 'OPEN';
+    data.submittedForReviewAt = null;
+    data.submittedById = null;
+    data.reviewedAt = null;
+    data.reviewedById = null;
+    reviewInvalidated = true;
+  }
+
   await prisma.card.update({ where: { id: card.id }, data });
+  if (reviewInvalidated || parsed.data.isComplete !== undefined) {
+    await invalidateCardReview(card.parentId);
+    await invalidateBoardReview(card.boardId);
+  }
+  if (parsed.data.isArchived !== undefined) await invalidateBoardReview(card.boardId);
   const updated = await fullCard(card.id);
 
   // Colour and priority describe the whole group, so they flow down to every
@@ -193,16 +256,18 @@ cardsRouter.patch('/:id', async (req, res) => {
     await logActivity(
       card.boardId,
       req.user!.id,
-      parsed.data.isComplete ? 'card.completed' : 'card.reopened',
+      parsed.data.isComplete ? 'card.review.requested' : 'card.reopened',
       { title: card.title },
       card.id
     );
-    const audience = await cardAudience(card.id);
+    const audience = parsed.data.isComplete ? await supervisorIds() : await cardAudience(card.id);
     await notify({
       userIds: audience,
       actorId: req.user!.id,
       type: 'card.status',
-      message: `${req.user!.name} marked "${card.title}" as ${parsed.data.isComplete ? 'complete' : 'open'}`,
+      message: parsed.data.isComplete
+        ? `${req.user!.name} submitted "${card.title}" for review`
+        : `${req.user!.name} reopened "${card.title}"`,
       boardId: card.boardId,
       cardId: card.id,
     });
@@ -211,6 +276,61 @@ cardsRouter.patch('/:id', async (req, res) => {
     await logActivity(card.boardId, req.user!.id, 'card.archived', { title: card.title }, card.id);
   }
 
+  emitBoard(card.boardId, 'card:updated', updated);
+  res.json({ card: updated });
+});
+
+/** Only a Supervisor can turn reviewed work into actually completed work. */
+cardsRouter.post('/:id/review', async (req, res) => {
+  if (req.user!.roleKey !== 'supervisor') {
+    return res.status(403).json({ error: 'Only a Supervisor can review completed work' });
+  }
+
+  const decision = z.enum(['approve', 'reject']).safeParse(req.body?.decision);
+  if (!decision.success) return res.status(400).json({ error: 'Choose approve or reject' });
+
+  const card = await prisma.card.findUnique({ where: { id: req.params.id } });
+  if (!card) return res.status(404).json({ error: 'Card not found' });
+  if (card.reviewStatus !== 'IN_REVIEW') {
+    return res.status(409).json({ error: 'This card is no longer waiting for review' });
+  }
+
+  if (decision.data === 'approve') {
+    const blockers = await completionBlockers(card.id);
+    if (blockers.uncheckedItems > 0 || blockers.unfinishedSubtasks > 0) {
+      return res.status(409).json({ error: 'The work changed and is no longer ready for approval' });
+    }
+  }
+
+  await prisma.card.update({
+    where: { id: card.id },
+    data: {
+      isComplete: decision.data === 'approve',
+      reviewStatus: decision.data === 'approve' ? 'APPROVED' : 'OPEN',
+      reviewedAt: new Date(),
+      reviewedById: req.user!.id,
+    },
+  });
+
+  await logActivity(
+    card.boardId,
+    req.user!.id,
+    decision.data === 'approve' ? 'card.review.approved' : 'card.review.rejected',
+    { title: card.title },
+    card.id
+  );
+  await notify({
+    userIds: [...(await cardAudience(card.id)), ...(card.submittedById ? [card.submittedById] : [])],
+    actorId: req.user!.id,
+    type: 'card.review',
+    message: `${req.user!.name} ${decision.data === 'approve' ? 'approved' : 'returned'} "${card.title}"`,
+    boardId: card.boardId,
+    cardId: card.id,
+  });
+  if (decision.data === 'reject') await invalidateCardReview(card.parentId);
+  await invalidateBoardReview(card.boardId);
+
+  const updated = await fullCard(card.id);
   emitBoard(card.boardId, 'card:updated', updated);
   res.json({ card: updated });
 });
@@ -284,6 +404,7 @@ cardsRouter.patch('/:id/move', async (req, res) => {
       toListId: target.id,
     });
   }
+  await invalidateBoardReview(card.boardId);
   res.json({ card: updated });
 });
 
@@ -293,6 +414,8 @@ cardsRouter.delete('/:id', async (req, res) => {
   if (!access?.canEdit) return res.status(403).json({ error: 'You cannot edit this board' });
 
   await prisma.card.delete({ where: { id: card.id } });
+  await invalidateCardReview(card.parentId);
+  await invalidateBoardReview(card.boardId);
   await logActivity(card.boardId, req.user!.id, 'card.deleted', { title: card.title });
   emitBoard(card.boardId, 'card:deleted', { id: card.id, listId: card.listId });
   res.json({ ok: true });
@@ -331,6 +454,7 @@ cardsRouter.post('/:id/duplicate', async (req, res) => {
     });
   }
 
+  await invalidateBoardReview(card.boardId);
   const full = await fullCard(copy.id);
   emitBoard(card.boardId, 'card:created', full);
   res.status(201).json({ card: full });
@@ -356,6 +480,7 @@ cardsRouter.post('/:id/assignees', async (req, res) => {
     create: { cardId: card.id, userId: userId.data },
     update: {},
   });
+  await invalidateCardReview(card.id);
 
   const person = await prisma.user.findUnique({ where: { id: userId.data }, select: publicUser });
   await notify({
@@ -381,6 +506,7 @@ cardsRouter.delete('/:id/assignees/:userId', async (req, res) => {
   await prisma.cardAssignee
     .delete({ where: { cardId_userId: { cardId: card.id, userId: req.params.userId } } })
     .catch(() => null);
+  await invalidateCardReview(card.id);
 
   const updated = await fullCard(card.id);
   emitBoard(card.boardId, 'card:updated', updated);
@@ -406,6 +532,7 @@ async function toggleCardTag(req: any, res: any) {
   } else {
     await prisma.cardLabel.create({ data: { cardId: card.id, labelId: tagId } });
   }
+  await invalidateCardReview(card.id);
 
   const updated = await fullCard(card.id);
   emitBoard(card.boardId, 'card:updated', updated);
@@ -430,6 +557,7 @@ cardsRouter.post('/:id/checklists', async (req, res) => {
   await prisma.checklist.create({
     data: { cardId: card.id, title: title.data, position: (count + 1) * 1024 },
   });
+  await invalidateCardReview(card.id);
   await logActivity(
     card.boardId,
     req.user!.id,
@@ -449,6 +577,7 @@ cardsRouter.delete('/:id/checklists/:checklistId', async (req, res) => {
   if (!access?.canEdit) return res.status(403).json({ error: 'You cannot edit this board' });
 
   await prisma.checklist.delete({ where: { id: req.params.checklistId } }).catch(() => null);
+  await invalidateCardReview(card.id);
   const updated = await fullCard(card.id);
   emitBoard(card.boardId, 'card:updated', updated);
   res.json({ card: updated });
@@ -466,6 +595,7 @@ cardsRouter.post('/:id/checklists/:checklistId/items', async (req, res) => {
   await prisma.checklistItem.create({
     data: { checklistId: req.params.checklistId, text: text.data, position: (count + 1) * 1024 },
   });
+  await invalidateCardReview(card.id);
   await logActivity(
     card.boardId,
     req.user!.id,
@@ -496,6 +626,9 @@ cardsRouter.patch('/:id/checklist-items/:itemId', async (req, res) => {
   if (!before) return res.status(404).json({ error: 'Checklist item not found' });
 
   await prisma.checklistItem.update({ where: { id: req.params.itemId }, data: parsed.data });
+  if (parsed.data.text !== undefined || parsed.data.isDone === false) {
+    await invalidateCardReview(card.id);
+  }
 
   // ticking an item is a real event — record who did it and when
   if (parsed.data.isDone !== undefined && parsed.data.isDone !== before.isDone) {
@@ -575,6 +708,7 @@ cardsRouter.post('/:id/checklist-items/:itemId/tags/:tagId', async (req, res) =>
       data: { checklistItemId: item.id, labelId: tag.id },
     });
   }
+  await invalidateCardReview(card.id);
 
   const updated = await fullCard(card.id);
   emitBoard(card.boardId, 'card:updated', updated);
@@ -587,6 +721,7 @@ cardsRouter.delete('/:id/checklist-items/:itemId', async (req, res) => {
   if (!access?.canEdit) return res.status(403).json({ error: 'You cannot edit this board' });
 
   await prisma.checklistItem.delete({ where: { id: req.params.itemId } }).catch(() => null);
+  await invalidateCardReview(card.id);
   const updated = await fullCard(card.id);
   emitBoard(card.boardId, 'card:updated', updated);
   res.json({ card: updated });
@@ -653,6 +788,8 @@ cardsRouter.patch('/:id/parent', async (req, res) => {
   }
 
   await prisma.card.update({ where: { id: card.id }, data: { parentId } });
+  await invalidateCardReview(card.id);
+  if (card.parentId && card.parentId !== parentId) await invalidateCardReview(card.parentId);
 
   const parentTitle = parentId
     ? (await prisma.card.findUnique({ where: { id: parentId }, select: { title: true } }))?.title
@@ -709,6 +846,7 @@ cardsRouter.post('/:id/subtasks', async (req, res) => {
       watchers: { create: { userId: req.user!.id } },
     },
   });
+  await invalidateCardReview(card.id);
 
   await logActivity(
     card.boardId,

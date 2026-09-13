@@ -30,6 +30,8 @@ export type BoardProgress = ProgressMetrics & {
   title: string;
   color: string;
   icon: string | null;
+  isComplete: boolean;
+  reviewStatus: string;
   tags: ReportTag[];
   lists: ListProgress[];
 };
@@ -119,9 +121,7 @@ function reportTotals(boards: BoardProgress[]) {
       ? Math.round((totals.completedUnits / totals.totalUnits) * 100)
       : 0,
     boards: boards.length,
-    completeBoards: boards.filter(
-      (board) => board.totalUnits > 0 && board.remainingUnits === 0
-    ).length,
+    completeBoards: boards.filter((board) => board.isComplete && board.reviewStatus === 'APPROVED').length,
     emptyBoards: boards.filter((board) => board.totalUnits === 0).length,
   };
 }
@@ -169,6 +169,8 @@ export async function getBoardProgressReport(): Promise<BoardProgressReport> {
       title: true,
       color: true,
       icon: true,
+      isComplete: true,
+      reviewStatus: true,
       lists: {
         where: { isArchived: false },
         orderBy: { position: 'asc' },
@@ -217,6 +219,8 @@ export async function getBoardProgressReport(): Promise<BoardProgressReport> {
       title: board.title,
       color: board.color,
       icon: board.icon,
+      isComplete: board.isComplete,
+      reviewStatus: board.reviewStatus,
       tags: collectTags(cards),
       ...summary,
       lists,

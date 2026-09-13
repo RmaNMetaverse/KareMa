@@ -16,6 +16,7 @@ declare global {
         email: string;
         name: string;
         role: 'ADMIN' | 'MEMBER' | 'GUEST';
+        roleKey: string | null;
         isActive: boolean;
         permissions: PermissionMap;
         can: (key: PermissionKey) => boolean;
@@ -70,6 +71,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     email: user.email,
     name: user.name,
     role: user.role,
+    roleKey: user.roleRef?.key ?? null,
     isActive: user.isActive,
     permissions,
     can: (key: PermissionKey) => can(permissions, key),

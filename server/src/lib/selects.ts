@@ -15,6 +15,8 @@ export const cardSummary = {
   title: true,
   number: true,
   isComplete: true,
+  reviewStatus: true,
+  submittedForReviewAt: true,
   priority: true,
   dueDate: true,
   listId: true,
@@ -30,6 +32,8 @@ export const cardInclude = {
   assignees: { include: { user: { select: publicUser } } },
   labels: { include: { label: true } },
   parent: { select: cardSummary },
+  submittedBy: { select: publicUser },
+  reviewedBy: { select: publicUser },
   children: {
     where: { isArchived: false },
     select: cardSummary,

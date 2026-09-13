@@ -135,8 +135,16 @@ attachment storage on the instance.
 
 <img src="docs/screenshots/admin-roles.png" alt="The roles tab of the admin panel">
 
-KareMa ships with three built-in roles — **Administrator**, **Member** and **Guest** —
-but an administrator can create as many more as the studio needs: *Producer*,
+KareMa ships with four built-in roles — **Supervisor**, **Administrator**, **Member** and
+**Guest**. Supervisor sits above Administrator and is the only role that can approve
+completion requests. Boards, tasks and subtasks all start **Open**, move to **In review**
+when submitted, and become **Approved** only when a Supervisor accepts them. A task or
+subtask cannot be submitted until its checklist items and subtasks are complete; a board
+cannot be submitted until all of its active tasks and subtasks are approved.
+The first Supervisor can be assigned by an Administrator; after that, only a Supervisor can
+manage or appoint other Supervisors.
+
+Administrators can create as many additional roles as the studio needs: *Producer*,
 *Tech Artist*, *Publisher QA*, whatever fits. Each role is a named colour plus a set of
 permissions:
 

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   Activity,
   BarChart3,
+  ClipboardCheck,
   ShieldCheck,
   HardDrive,
   KeyRound,
@@ -27,6 +28,7 @@ import { UserReviewPanel } from '../components/admin/UserReviewPanel';
 import { Role, RolesTab } from '../components/admin/RolesTab';
 import { BoardProgressReport } from '../components/admin/BoardProgressReport';
 import { BoardDefaultsTab } from '../components/admin/BoardDefaultsTab';
+import { SupervisorReviews } from '../components/admin/SupervisorReviews';
 import {
   Avatar,
   ConfirmDialog,
@@ -44,6 +46,7 @@ const TABS = [
   { id: 'defaults', label: 'Board defaults', icon: <Settings2 size={16} />, permission: 'admin.access' },
   { id: 'boards', label: 'Boards', icon: <LayoutGrid size={16} />, permission: 'admin.access' },
   { id: 'reports', label: 'Reports', icon: <BarChart3 size={16} />, permission: 'reports.view' },
+  { id: 'reviews', label: 'Reviews', icon: <ClipboardCheck size={16} />, role: 'supervisor' },
 ];
 
 const ROLE_STYLES: Record<string, string> = {
@@ -56,7 +59,9 @@ export function AdminPage() {
   const { tab = 'overview' } = useParams();
   const navigate = useNavigate();
   const { user } = useApp();
-  const allowed = TABS.filter((t) => user?.permissions?.[t.permission]);
+  const allowed = TABS.filter(
+    (t) => ('role' in t ? user?.roleRef?.key === t.role : user?.permissions?.[t.permission])
+  );
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-7 sm:px-6">
@@ -95,6 +100,7 @@ export function AdminPage() {
         )}
         {tab === 'boards' && <BoardsTab />}
         {tab === 'reports' && user?.permissions?.['reports.view'] && <BoardProgressReport />}
+        {tab === 'reviews' && user?.roleRef?.key === 'supervisor' && <SupervisorReviews />}
       </div>
     </div>
   );
@@ -152,7 +158,7 @@ function Overview() {
 /* ------------------------------------------------------------------ users */
 
 function UsersTab() {
-  const { user: me, toast } = useApp();
+  const { user: me, toast, refreshUser } = useApp();
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
@@ -187,10 +193,15 @@ function UsersTab() {
   const filtered = users.filter((u) =>
     `${u.name} ${u.email}`.toLowerCase().includes(query.toLowerCase())
   );
+  const isSupervisor = me?.roleRef?.key === 'supervisor';
+  const hasSupervisor = users.some((person) => person.isActive && person.roleRef?.key === 'supervisor');
+  const assignableRoles =
+    isSupervisor || !hasSupervisor ? roles : roles.filter((role) => role.key !== 'supervisor');
 
   const setRole = async (u: any, roleId: string) => {
     try {
       await patch(`/api/admin/users/${u.id}`, { roleId });
+      if (u.id === me?.id) await refreshUser();
       load();
     } catch (err: any) {
       toast({ title: err.message, tone: 'error' });
@@ -284,10 +295,11 @@ function UsersTab() {
                           : undefined
                       }
                       value={u.roleId ?? ''}
+                      disabled={!isSupervisor && u.roleRef?.key === 'supervisor'}
                       onChange={(e) => setRole(u, e.target.value)}
                     >
                       {!u.roleId && <option value="">No role</option>}
-                      {roles.map((r) => (
+                      {(u.roleRef?.key === 'supervisor' && !isSupervisor ? roles : assignableRoles).map((r) => (
                         <option key={r.id} value={r.id}>
                           {r.name}
                         </option>
@@ -298,7 +310,11 @@ function UsersTab() {
                     {u.lastSeenAt ? timeAgo(u.lastSeenAt) : 'never signed in'}
                   </td>
                   <td className="px-4 py-3">
-                    <Switch checked={u.isActive} onChange={(v) => setActive(u, v)} />
+                    {!isSupervisor && u.roleRef?.key === 'supervisor' ? (
+                      <span className="text-xs text-muted">{u.isActive ? 'Active' : 'Inactive'}</span>
+                    ) : (
+                      <Switch checked={u.isActive} onChange={(v) => setActive(u, v)} />
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
@@ -309,28 +325,32 @@ function UsersTab() {
                       >
                         <BarChart3 size={15} />
                       </button>
-                      <button
-                        className="btn btn-ghost btn-icon"
-                        title="Edit"
-                        onClick={() => setEditing(u)}
-                      >
-                        <UserCog size={15} />
-                      </button>
-                      <button
-                        className="btn btn-ghost btn-icon"
-                        title="Reset password"
-                        onClick={() => setResetting(u)}
-                      >
-                        <KeyRound size={15} />
-                      </button>
-                      <button
-                        className="btn btn-ghost btn-icon text-muted hover:text-danger"
-                        title="Delete"
-                        disabled={u.id === me?.id}
-                        onClick={() => setDeleting(u)}
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      {(isSupervisor || u.roleRef?.key !== 'supervisor') && (
+                        <>
+                          <button
+                            className="btn btn-ghost btn-icon"
+                            title="Edit"
+                            onClick={() => setEditing(u)}
+                          >
+                            <UserCog size={15} />
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-icon"
+                            title="Reset password"
+                            onClick={() => setResetting(u)}
+                          >
+                            <KeyRound size={15} />
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-icon text-muted hover:text-danger"
+                            title="Delete"
+                            disabled={u.id === me?.id}
+                            onClick={() => setDeleting(u)}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -354,7 +374,7 @@ function UsersTab() {
       <UserFormModal
         open={createOpen || !!editing}
         user={editing}
-        roles={roles}
+        roles={assignableRoles}
         onClose={() => {
           setCreateOpen(false);
           setEditing(null);

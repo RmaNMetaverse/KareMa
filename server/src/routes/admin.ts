@@ -55,6 +55,14 @@ async function roleFromLegacyTier(tier?: string) {
   return key ? prisma.role.findUnique({ where: { key } }) : null;
 }
 
+async function canAssignSupervisor(req: any) {
+  if (req.user?.roleKey === 'supervisor') return true;
+  const existing = await prisma.user.count({
+    where: { isActive: true, roleRef: { key: 'supervisor' } },
+  });
+  return existing === 0;
+}
+
 adminRouter.post('/users', requirePermission('users.manage'), async (req, res) => {
   const parsed = z
     .object({
@@ -80,6 +88,9 @@ adminRouter.post('/users', requirePermission('users.manage'), async (req, res) =
     : (await roleFromLegacyTier(parsed.data.role)) ??
       (await prisma.role.findUnique({ where: { key: 'member' } }));
   if (!role) return res.status(400).json({ error: 'That role no longer exists' });
+  if (role.key === 'supervisor' && !(await canAssignSupervisor(req))) {
+    return res.status(403).json({ error: 'Only a Supervisor can create another Supervisor' });
+  }
 
   const palette = ['#6366f1', '#ec4899', '#f97316', '#10b981', '#0ea5e9', '#8b5cf6', '#f43f5e', '#14b8a6'];
   const user = await prisma.user.create({
@@ -117,6 +128,13 @@ adminRouter.patch('/users/:id', requirePermission('users.manage'), async (req, r
     include: { roleRef: true },
   });
   if (!target) return res.status(404).json({ error: 'User not found' });
+  if (
+    target.roleRef?.key === 'supervisor' &&
+    req.user!.roleKey !== 'supervisor' &&
+    !(await canAssignSupervisor(req))
+  ) {
+    return res.status(403).json({ error: 'Only a Supervisor can manage another Supervisor' });
+  }
 
   const wasAdmin = can(permissionsOf(target), 'users.manage');
   let nextRole = target.roleRef;
@@ -128,11 +146,22 @@ adminRouter.patch('/users/:id', requirePermission('users.manage'), async (req, r
     nextRole = await roleFromLegacyTier(parsed.data.role);
     if (!nextRole) return res.status(400).json({ error: 'That role no longer exists' });
   }
+  if (nextRole?.key === 'supervisor' && !(await canAssignSupervisor(req))) {
+    return res.status(403).json({ error: 'Only a Supervisor can assign the Supervisor role' });
+  }
 
-  const willAdmin =
-    parsed.data.isActive === false
-      ? false
-      : can((nextRole?.permissions ?? {}) as any, 'users.manage');
+  const nextIsActive = parsed.data.isActive ?? target.isActive;
+  const willAdmin = nextIsActive && can((nextRole?.permissions ?? {}) as any, 'users.manage');
+  const willSupervisor = nextIsActive && nextRole?.key === 'supervisor';
+
+  if (target.roleRef?.key === 'supervisor' && target.isActive && !willSupervisor) {
+    const otherSupervisors = await prisma.user.count({
+      where: { id: { not: target.id }, isActive: true, roleRef: { key: 'supervisor' } },
+    });
+    if (otherSupervisors === 0) {
+      return res.status(400).json({ error: 'There must always be at least one active Supervisor' });
+    }
+  }
 
   // never let the instance lose its last administrator
   if (wasAdmin && !willAdmin && (await countAdministrators(target.id)) === 0) {
@@ -163,6 +192,19 @@ adminRouter.post('/users/:id/password', requirePermission('users.manage'), async
     .safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Password must be at least 6 characters' });
 
+  const target = await prisma.user.findUnique({
+    where: { id: req.params.id },
+    select: { roleRef: { select: { key: true } } },
+  });
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (
+    target.roleRef?.key === 'supervisor' &&
+    req.user!.roleKey !== 'supervisor' &&
+    !(await canAssignSupervisor(req))
+  ) {
+    return res.status(403).json({ error: 'Only a Supervisor can reset another Supervisor password' });
+  }
+
   await prisma.user.update({
     where: { id: req.params.id },
     data: {
@@ -182,6 +224,21 @@ adminRouter.delete('/users/:id', requirePermission('users.manage'), async (req, 
     include: { roleRef: true },
   });
   if (!target) return res.status(404).json({ error: 'User not found' });
+  if (
+    target.roleRef?.key === 'supervisor' &&
+    req.user!.roleKey !== 'supervisor' &&
+    !(await canAssignSupervisor(req))
+  ) {
+    return res.status(403).json({ error: 'Only a Supervisor can delete another Supervisor' });
+  }
+  if (target.roleRef?.key === 'supervisor' && target.isActive) {
+    const otherSupervisors = await prisma.user.count({
+      where: { id: { not: target.id }, isActive: true, roleRef: { key: 'supervisor' } },
+    });
+    if (otherSupervisors === 0) {
+      return res.status(400).json({ error: 'There must always be at least one active Supervisor' });
+    }
+  }
 
   if (can(permissionsOf(target), 'users.manage') && (await countAdministrators(target.id)) === 0) {
     return res
@@ -253,6 +310,9 @@ adminRouter.patch('/roles/:id', requirePermission('roles.manage'), async (req, r
 
   const role = await prisma.role.findUnique({ where: { id: req.params.id } });
   if (!role) return res.status(404).json({ error: 'Role not found' });
+  if (role.key === 'supervisor') {
+    return res.status(400).json({ error: 'The Supervisor role is fixed and cannot be edited' });
+  }
 
   const data: any = { ...parsed.data };
   if (parsed.data.permissions) {
@@ -479,6 +539,58 @@ adminRouter.put('/settings', async (req, res) => {
 });
 
 /* ------------------------------------------------------------ user review */
+
+adminRouter.get('/reviews', async (req, res) => {
+  if (req.user!.roleKey !== 'supervisor') {
+    return res.status(403).json({ error: 'Only a Supervisor can review completed work' });
+  }
+
+  const [boards, cards] = await Promise.all([
+    prisma.board.findMany({
+      where: { isArchived: false, reviewStatus: 'IN_REVIEW' },
+      orderBy: { submittedForReviewAt: 'asc' },
+      take: 100,
+      select: {
+        id: true,
+        title: true,
+        submittedForReviewAt: true,
+        submittedBy: { select: publicUser },
+        color: true,
+        icon: true,
+        _count: { select: { cards: true, lists: true } },
+      },
+    }),
+    prisma.card.findMany({
+      where: { isArchived: false, reviewStatus: 'IN_REVIEW' },
+      orderBy: { submittedForReviewAt: 'asc' },
+      take: 250,
+      select: {
+        id: true,
+        title: true,
+        number: true,
+        parentId: true,
+        submittedForReviewAt: true,
+        submittedBy: { select: publicUser },
+        board: { select: { id: true, title: true, color: true, icon: true } },
+        list: { select: { id: true, title: true } },
+        assignees: { select: { user: { select: publicUser } } },
+        checklists: { select: { items: { select: { isDone: true } } } },
+        children: {
+          where: { isArchived: false },
+          select: { id: true, isComplete: true },
+        },
+      },
+    }),
+  ]);
+  const items = [
+    ...boards.map((board) => ({ ...board, kind: 'board' as const })),
+    ...cards.map((card) => ({ ...card, kind: 'card' as const })),
+  ].sort(
+    (a, b) =>
+      (a.submittedForReviewAt?.getTime() ?? 0) - (b.submittedForReviewAt?.getTime() ?? 0)
+  );
+  res.json({ cards: items });
+});
 
 /**
  * A review of one person's work: totals, a day-by-day trend, a per-board

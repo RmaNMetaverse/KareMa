@@ -20,6 +20,8 @@ import {
 } from '@dnd-kit/sortable';
 import {
   Filter,
+  CheckCircle2,
+  Clock3,
   Plus,
   Rows3,
   Settings2,
@@ -57,6 +59,8 @@ type BoardData = {
   background?: string | null;
   icon?: string | null;
   isPublic: boolean;
+  isComplete: boolean;
+  reviewStatus: 'OPEN' | 'IN_REVIEW' | 'APPROVED';
   starred: boolean;
   myRole: string;
   canEdit: boolean;
@@ -509,6 +513,31 @@ export function BoardPage() {
     }
   };
 
+  const submitBoardForReview = async () => {
+    try {
+      const res = await post<{ board: Partial<BoardData> }>(`/api/boards/${boardId}/submit-review`);
+      setBoard((current) => (current ? { ...current, ...res.board } : current));
+      toast({ title: 'Board submitted for review', tone: 'success' });
+    } catch (err: any) {
+      toast({ title: err.message || 'Could not submit the board', tone: 'error' });
+    }
+  };
+
+  const reviewBoard = async (decision: 'approve' | 'reject') => {
+    try {
+      const res = await post<{ board: Partial<BoardData> }>(`/api/boards/${boardId}/review`, {
+        decision,
+      });
+      setBoard((current) => (current ? { ...current, ...res.board } : current));
+      toast({
+        title: decision === 'approve' ? 'Board approved' : 'Board returned to open',
+        tone: decision === 'approve' ? 'success' : 'info',
+      });
+    } catch (err: any) {
+      toast({ title: err.message || 'Could not save the board review', tone: 'error' });
+    }
+  };
+
   const openCard = (cardId: string) => {
     searchParams.set('card', cardId);
     setSearchParams(searchParams, { replace: false });
@@ -666,6 +695,36 @@ export function BoardPage() {
             compactLabels={compactLabels}
             setCompactLabels={setCompactLabels}
           />
+
+          {board.reviewStatus === 'APPROVED' && (
+            <span className="chip bg-success/16 text-success" title="Approved by a Supervisor">
+              <CheckCircle2 size={12} /> Approved
+            </span>
+          )}
+
+          {board.reviewStatus === 'IN_REVIEW' && (
+            <span className="chip bg-warning/16 text-warning" title="Waiting for Supervisor approval">
+              <Clock3 size={12} /> In review
+            </span>
+          )}
+
+          {board.reviewStatus === 'OPEN' && board.canManage && (
+            <button className="btn btn-subtle" onClick={submitBoardForReview} title="Submit this board for approval">
+              <Clock3 size={14} />
+              <span className="hidden lg:inline">Submit board</span>
+            </button>
+          )}
+
+          {board.reviewStatus === 'IN_REVIEW' && user?.roleRef?.key === 'supervisor' && (
+            <div className="flex gap-1">
+              <button className="btn btn-subtle text-xs text-danger" onClick={() => reviewBoard('reject')}>
+                Return
+              </button>
+              <button className="btn btn-primary text-xs" onClick={() => reviewBoard('approve')}>
+                Approve
+              </button>
+            </div>
+          )}
 
           {board.canManage && (
             <button

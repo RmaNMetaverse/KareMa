@@ -138,7 +138,7 @@ async function seedWelcomeBoard(adminId: string) {
       listId: tryIt.id,
       title: 'Add your team in the Admin panel',
       description:
-        'As an administrator you can create accounts, set access levels (Administrator, Member, Guest), reset passwords and deactivate people.\n\nThen add them to a board from Board → Members.',
+        'As an administrator you can create accounts, set access levels (Supervisor, Administrator, Member, Guest), reset passwords and deactivate people. Supervisors give the final approval before completed work counts as finished.\n\nThen add people to a board from Board → Members.',
     },
     {
       listId: tryIt.id,
@@ -158,6 +158,7 @@ async function seedWelcomeBoard(adminId: string) {
         position: (i + 1) * 1024,
         number: i + 1,
         isComplete: c.complete ?? false,
+        reviewStatus: c.complete ? 'APPROVED' : 'OPEN',
         createdById: adminId,
       },
     });
@@ -167,6 +168,25 @@ async function seedWelcomeBoard(adminId: string) {
   }
 
   console.log('[karema] created the welcome board');
+}
+
+/**
+ * Existing installations can already contain completed cards from before the
+ * approval lifecycle existed. Put those cards into the Supervisor queue once
+ * so no legacy completion silently bypasses the new rule.
+ */
+async function migrateLegacyCompletionsToReview() {
+  const result = await prisma.card.updateMany({
+    where: { isComplete: true, reviewStatus: 'OPEN' },
+    data: {
+      isComplete: false,
+      reviewStatus: 'IN_REVIEW',
+      submittedForReviewAt: new Date(),
+    },
+  });
+  if (result.count > 0) {
+    console.log(`[karema] moved ${result.count} legacy completed cards into Supervisor review`);
+  }
 }
 
 async function start() {
@@ -186,6 +206,7 @@ async function start() {
 
   await ensureRoles();
   await ensureAdmin();
+  await migrateLegacyCompletionsToReview();
 
   const server = http.createServer(app);
   initRealtime(server);
