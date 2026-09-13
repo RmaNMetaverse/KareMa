@@ -8,6 +8,7 @@ import {
   LayoutGrid,
   MessageSquare,
   Paperclip,
+  ShieldCheck,
   SquareKanban,
   TrendingUp,
 } from 'lucide-react';
@@ -31,12 +32,26 @@ type Report = {
     completionRate: number;
     actionsInWindow: number;
     completedInWindow: number;
+    reviewDecisions: number;
+    reviewApprovals: number;
+    reviewReturns: number;
+    reviewsInWindow: number;
+    approvalsInWindow: number;
+    returnsInWindow: number;
   };
-  trend: { date: string; completed: number; created: number; comments: number }[];
+  trend: {
+    date: string;
+    completed: number;
+    created: number;
+    comments: number;
+    reviewsApproved: number;
+    reviewsReturned: number;
+  }[];
   boards: any[];
   openCards: any[];
   doneCards: any[];
   activity: any[];
+  reviewActivity: any[];
 };
 
 const RANGES = [
@@ -49,6 +64,7 @@ const SECTIONS = [
   { id: 'summary', label: 'Summary' },
   { id: 'open', label: 'Open work' },
   { id: 'done', label: 'Completed' },
+  { id: 'reviews', label: 'Reviews' },
   { id: 'activity', label: 'Activity' },
 ] as const;
 
@@ -121,7 +137,12 @@ export function UserReviewPanel({ userId, onClose }: { userId: string; onClose: 
           />
 
           <div className="flex gap-1 border-b border-line/70 px-4 pt-2">
-            {SECTIONS.map((s) => (
+            {SECTIONS.filter(
+              (s) =>
+                s.id !== 'reviews' ||
+                report.user.roleRef?.key === 'supervisor' ||
+                report.totals.reviewDecisions > 0
+            ).map((s) => (
               <button
                 key={s.id}
                 onClick={() => setSection(s.id)}
@@ -135,6 +156,11 @@ export function UserReviewPanel({ userId, onClose }: { userId: string; onClose: 
                 {s.label}
                 {s.id === 'open' && report.totals.open > 0 && (
                   <span className="ml-1.5 text-[11px] text-muted">{report.totals.open}</span>
+                )}
+                {s.id === 'reviews' && report.totals.reviewsInWindow > 0 && (
+                  <span className="ml-1.5 text-[11px] text-muted">
+                    {report.totals.reviewsInWindow}
+                  </span>
                 )}
               </button>
             ))}
@@ -161,6 +187,9 @@ export function UserReviewPanel({ userId, onClose }: { userId: string; onClose: 
                 done
               />
             )}
+            {section === 'reviews' && (
+              <ActivityTrail activity={report.reviewActivity} days={days} />
+            )}
             {section === 'activity' && <ActivityTrail activity={report.activity} days={days} />}
           </div>
         </>
@@ -173,6 +202,7 @@ export function UserReviewPanel({ userId, onClose }: { userId: string; onClose: 
 
 function Summary({ report }: { report: Report }) {
   const t = report.totals;
+  const showReviews = report.user.roleRef?.key === 'supervisor' || t.reviewDecisions > 0;
 
   const tiles = [
     {
@@ -199,10 +229,28 @@ function Summary({ report }: { report: Report }) {
     {
       label: `Finished in ${report.days}d`,
       value: t.completedInWindow,
-      hint: `${t.actionsInWindow} actions total`,
+      hint: `${t.actionsInWindow} actions total · accepted reviews count`,
       icon: <TrendingUp size={15} />,
       tone: 'text-primary',
     },
+    ...(showReviews
+      ? [
+          {
+            label: 'Review decisions',
+            value: t.reviewDecisions,
+            hint: `${t.reviewApprovals} accepted · ${t.reviewReturns} returned`,
+            icon: <ShieldCheck size={15} />,
+            tone: 'text-primary',
+          },
+          {
+            label: `Reviews in ${report.days}d`,
+            value: t.reviewsInWindow,
+            hint: `${t.approvalsInWindow} accepted · ${t.returnsInWindow} returned`,
+            icon: <ClipboardList size={15} />,
+            tone: 'text-primary',
+          },
+        ]
+      : []),
     {
       label: 'Cards created',
       value: t.createdCards,
@@ -259,15 +307,24 @@ function Summary({ report }: { report: Report }) {
                         {b.title}
                       </Link>
                       <span className="shrink-0 text-[11px] text-muted">
-                        {b.completed}/{b.assigned} done · {b.role.toLowerCase()}
+                        {b.assigned > 0 && `${b.completed}/${b.assigned} done · `}
+                        {b.reviews > 0 && `${b.reviews} reviewed · `}
+                        {b.role.toLowerCase()}
                       </span>
                     </div>
-                    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface3">
-                      <div
-                        className="h-full rounded-full bg-success transition-[width] duration-500"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
+                    {b.assigned > 0 && (
+                      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface3">
+                        <div
+                          className="h-full rounded-full bg-success transition-[width] duration-500"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    )}
+                    {b.reviews > 0 && (
+                      <p className="mt-1 text-[10px] font-medium text-muted">
+                        {b.approvals} accepted · {b.returns} returned in the selected period
+                      </p>
+                    )}
                   </div>
                 </div>
               );
@@ -283,10 +340,19 @@ function Summary({ report }: { report: Report }) {
 
 function TrendChart({ trend, days }: { trend: Report['trend']; days: number }) {
   const max = useMemo(
-    () => Math.max(1, ...trend.map((d) => d.completed + d.created + d.comments)),
+    () =>
+      Math.max(
+        1,
+        ...trend.map(
+          (d) => d.completed + d.created + d.comments + d.reviewsApproved + d.reviewsReturned
+        )
+      ),
     [trend]
   );
-  const total = trend.reduce((n, d) => n + d.completed + d.created + d.comments, 0);
+  const total = trend.reduce(
+    (n, d) => n + d.completed + d.created + d.comments + d.reviewsApproved + d.reviewsReturned,
+    0
+  );
 
   if (total === 0) {
     return (
@@ -307,20 +373,23 @@ function TrendChart({ trend, days }: { trend: Report['trend']; days: number }) {
           <Legend color="hsl(var(--success))" label="completed" />
           <Legend color="hsl(var(--primary))" label="cards created" />
           <Legend color="hsl(var(--secondary))" label="comments" />
+          <Legend color="#8b5cf6" label="reviews accepted" />
+          <Legend color="hsl(var(--warning))" label="reviews returned" />
         </div>
       </div>
 
       <div className="glass rounded-lg p-4">
         <div className="flex h-32 items-end gap-[2px]">
           {trend.map((d) => {
-            const sum = d.completed + d.created + d.comments;
+            const sum =
+              d.completed + d.created + d.comments + d.reviewsApproved + d.reviewsReturned;
             const h = (sum / max) * 100;
             return (
               <div
                 key={d.date}
                 className="group/bar relative flex flex-1 flex-col justify-end"
                 style={{ height: '100%' }}
-                title={`${formatDate(d.date)} — ${d.completed} completed, ${d.created} created, ${d.comments} comments`}
+                title={`${formatDate(d.date)} — ${d.completed} completed, ${d.created} created, ${d.comments} comments, ${d.reviewsApproved} reviews accepted, ${d.reviewsReturned} returned`}
               >
                 <div
                   className="flex w-full flex-col-reverse overflow-hidden rounded-t-[2px] transition-opacity group-hover/bar:opacity-80"
@@ -342,6 +411,18 @@ function TrendChart({ trend, days }: { trend: Report['trend']; days: number }) {
                     <span
                       className="w-full"
                       style={{ flex: d.comments, background: 'hsl(var(--secondary))' }}
+                    />
+                  )}
+                  {d.reviewsApproved > 0 && (
+                    <span
+                      className="w-full"
+                      style={{ flex: d.reviewsApproved, background: '#8b5cf6' }}
+                    />
+                  )}
+                  {d.reviewsReturned > 0 && (
+                    <span
+                      className="w-full"
+                      style={{ flex: d.reviewsReturned, background: 'hsl(var(--warning))' }}
                     />
                   )}
                 </div>
@@ -433,6 +514,9 @@ const ACTIVITY_TEXT: Record<string, (d: any) => string> = {
   'card.created': () => 'created a card',
   'card.moved': (d) => `moved a card from ${d.from} to ${d.to}`,
   'card.completed': () => 'completed a card',
+  'card.review.requested': () => 'submitted completion for review on',
+  'card.review.approved': () => 'accepted completion for',
+  'card.review.rejected': () => 'returned completion for',
   'card.reopened': () => 'reopened a card',
   'card.archived': () => 'archived a card',
   'card.assigned': (d) => `assigned ${d.name}`,
@@ -442,6 +526,9 @@ const ACTIVITY_TEXT: Record<string, (d: any) => string> = {
   'list.created': (d) => `added the list "${d.title}"`,
   'list.deleted': (d) => `deleted the list "${d.title}"`,
   'board.created': (d) => `created the board "${d.title}"`,
+  'board.review.requested': () => 'submitted the board for review',
+  'board.review.approved': () => 'accepted board completion',
+  'board.review.rejected': () => 'returned board completion',
   'member.added': (d) => `added ${d.name} to the board`,
 };
 

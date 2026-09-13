@@ -594,7 +594,8 @@ adminRouter.get('/reviews', async (req, res) => {
 
 /**
  * A review of one person's work: totals, a day-by-day trend, a per-board
- * breakdown, their open and recently finished cards, and a raw activity trail.
+ * breakdown, their open and recently finished cards, review decisions, and a
+ * raw activity trail.
  */
 adminRouter.get('/users/:id/report', requirePermission('reports.view'), async (req, res) => {
   const days = Math.min(Math.max(parseInt(String(req.query.days || '30'), 10) || 30, 7), 365);
@@ -608,6 +609,13 @@ adminRouter.get('/users/:id/report', requirePermission('reports.view'), async (r
   if (!user) return res.status(404).json({ error: 'User not found' });
 
   const assignedWhere = { isArchived: false, assignees: { some: { userId } } };
+  const reviewDecisionTypes = [
+    'card.review.approved',
+    'card.review.rejected',
+    'board.review.approved',
+    'board.review.rejected',
+  ];
+  const reviewApprovalTypes = ['card.review.approved', 'board.review.approved'];
 
   const [
     assigned,
@@ -619,7 +627,11 @@ adminRouter.get('/users/:id/report', requirePermission('reports.view'), async (r
     attachmentAgg,
     checklistTicks,
     memberships,
-    activities,
+    activityEvents,
+    activityLog,
+    reviewActivity,
+    reviewDecisions,
+    reviewApprovals,
     openCards,
     doneCards,
   ] = await Promise.all([
@@ -646,12 +658,32 @@ adminRouter.get('/users/:id/report', requirePermission('reports.view'), async (r
     prisma.activity.findMany({
       where: { userId, createdAt: { gte: since } },
       orderBy: { createdAt: 'desc' },
-      take: 400,
+      select: { type: true, createdAt: true, boardId: true },
+    }),
+    prisma.activity.findMany({
+      where: { userId, createdAt: { gte: since } },
+      orderBy: { createdAt: 'desc' },
+      take: 60,
       include: {
         board: { select: { id: true, title: true, color: true, icon: true } },
         card: { select: { id: true, title: true } },
       },
     }),
+    prisma.activity.findMany({
+      where: {
+        userId,
+        createdAt: { gte: since },
+        type: { in: reviewDecisionTypes },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      include: {
+        board: { select: { id: true, title: true, color: true, icon: true } },
+        card: { select: { id: true, title: true } },
+      },
+    }),
+    prisma.activity.count({ where: { userId, type: { in: reviewDecisionTypes } } }),
+    prisma.activity.count({ where: { userId, type: { in: reviewApprovalTypes } } }),
     prisma.card.findMany({
       where: { ...assignedWhere, isComplete: false },
       orderBy: [{ dueDate: 'asc' }, { updatedAt: 'desc' }],
@@ -677,39 +709,91 @@ adminRouter.get('/users/:id/report', requirePermission('reports.view'), async (r
   // day-by-day trend, oldest first, with empty days filled in
   const buckets = new Map<
     string,
-    { date: string; completed: number; created: number; comments: number; checklist: number }
+    {
+      date: string;
+      completed: number;
+      created: number;
+      comments: number;
+      checklist: number;
+      reviewsApproved: number;
+      reviewsReturned: number;
+    }
   >();
   for (let i = days - 1; i >= 0; i--) {
     const key = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
-    buckets.set(key, { date: key, completed: 0, created: 0, comments: 0, checklist: 0 });
+    buckets.set(key, {
+      date: key,
+      completed: 0,
+      created: 0,
+      comments: 0,
+      checklist: 0,
+      reviewsApproved: 0,
+      reviewsReturned: 0,
+    });
   }
-  for (const a of activities) {
+  for (const a of activityEvents) {
     const bucket = buckets.get(a.createdAt.toISOString().slice(0, 10));
     if (!bucket) continue;
     if (a.type === 'card.completed') bucket.completed++;
     else if (a.type === 'card.created') bucket.created++;
     else if (a.type === 'comment.added') bucket.comments++;
     else if (a.type === 'checklist.checked') bucket.checklist++;
+    else if (reviewApprovalTypes.includes(a.type)) bucket.reviewsApproved++;
+    else if (reviewDecisionTypes.includes(a.type)) bucket.reviewsReturned++;
   }
 
+  const reviewsByBoard = new Map<
+    string,
+    { reviews: number; approvals: number; returns: number }
+  >();
+  for (const activity of activityEvents) {
+    if (!reviewDecisionTypes.includes(activity.type)) continue;
+    const current = reviewsByBoard.get(activity.boardId) ?? { reviews: 0, approvals: 0, returns: 0 };
+    current.reviews++;
+    if (reviewApprovalTypes.includes(activity.type)) current.approvals++;
+    else current.returns++;
+    reviewsByBoard.set(activity.boardId, current);
+  }
+
+  const membershipBoardIds = new Set(memberships.map((membership) => membership.boardId));
+  const reviewOnlyBoardIds = [...reviewsByBoard.keys()].filter((boardId) => !membershipBoardIds.has(boardId));
+  const reviewOnlyBoards = reviewOnlyBoardIds.length
+    ? await prisma.board.findMany({
+        where: { id: { in: reviewOnlyBoardIds } },
+        select: { id: true, title: true, color: true, icon: true, isArchived: true },
+      })
+    : [];
+  const boardSources = [
+    ...memberships.map((membership) => ({ ...membership.board, role: membership.role })),
+    ...reviewOnlyBoards.map((board) => ({ ...board, role: 'REVIEWER' })),
+  ];
+
   const boards = await Promise.all(
-    memberships.map(async (m) => {
+    boardSources.map(async (board) => {
       const [total, done] = await Promise.all([
         prisma.card.count({
-          where: { boardId: m.boardId, isArchived: false, assignees: { some: { userId } } },
+          where: { boardId: board.id, isArchived: false, assignees: { some: { userId } } },
         }),
         prisma.card.count({
           where: {
-            boardId: m.boardId,
+            boardId: board.id,
             isArchived: false,
             isComplete: true,
             assignees: { some: { userId } },
           },
         }),
       ]);
-      return { ...m.board, role: m.role, assigned: total, completed: done };
+      const reviewStats = reviewsByBoard.get(board.id) ?? { reviews: 0, approvals: 0, returns: 0 };
+      return { ...board, assigned: total, completed: done, ...reviewStats };
     })
   );
+
+  const reviewsInWindow = activityEvents.filter((activity) =>
+    reviewDecisionTypes.includes(activity.type)
+  ).length;
+  const approvalsInWindow = activityEvents.filter((activity) =>
+    reviewApprovalTypes.includes(activity.type)
+  ).length;
 
   res.json({
     report: {
@@ -723,18 +807,27 @@ adminRouter.get('/users/:id/report', requirePermission('reports.view'), async (r
         createdCards,
         comments,
         checklistTicks,
+        reviewDecisions,
+        reviewApprovals,
+        reviewReturns: reviewDecisions - reviewApprovals,
+        reviewsInWindow,
+        approvalsInWindow,
+        returnsInWindow: reviewsInWindow - approvalsInWindow,
         attachments: attachmentAgg._count,
         storageBytes: attachmentAgg._sum.size || 0,
         boards: memberships.length,
         completionRate: assigned ? Math.round((completed / assigned) * 100) : 0,
-        actionsInWindow: activities.length,
-        completedInWindow: activities.filter((a) => a.type === 'card.completed').length,
+        actionsInWindow: activityEvents.length,
+        completedInWindow: activityEvents.filter(
+          (activity) => activity.type === 'card.completed' || reviewApprovalTypes.includes(activity.type)
+        ).length,
       },
       trend: Array.from(buckets.values()),
-      boards: boards.sort((a, b) => b.assigned - a.assigned),
+      boards: boards.sort((a, b) => b.reviews - a.reviews || b.assigned - a.assigned),
       openCards,
       doneCards,
-      activity: activities.slice(0, 60),
+      activity: activityLog,
+      reviewActivity,
     },
   });
 });
