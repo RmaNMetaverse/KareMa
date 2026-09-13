@@ -438,6 +438,7 @@ export function CardModal({ cardId, board, onClose, onChanged, onOpenCard }: Pro
 
               <Subtasks
                 card={card}
+                board={board}
                 canEdit={canEdit}
                 onChanged={load}
                 onOpenCard={onOpenCard}

@@ -291,6 +291,7 @@ function ReportControls({
     <div className="glass relative z-20 flex flex-wrap items-center gap-2 rounded-xl p-3">
       <Popover
         width="w-72"
+        className="popover-opaque"
         trigger={({ toggle: open }) => (
           <button className={cn('btn', selectedTags.length ? 'btn-solid' : 'btn-subtle')} onClick={open}>
             <Tag size={14} />

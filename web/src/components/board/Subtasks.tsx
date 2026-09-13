@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, CornerDownRight, GitBranch, Link2Off, Plus, Search, X } from 'lucide-react';
+import { Check, CornerDownRight, GitBranch, Link2Off, Plus, Search, Tag, X } from 'lucide-react';
 import { del, get, patch, post } from '../../lib/api';
 import { useApp } from '../../store/app';
 import { cn, dueState, formatDate, PRIORITIES } from '../../lib/utils';
@@ -58,11 +58,13 @@ export function ParentBreadcrumb({
 
 export function Subtasks({
   card,
+  board,
   canEdit,
   onChanged,
   onOpenCard,
 }: {
   card: any;
+  board: any;
   canEdit: boolean;
   onChanged: () => void;
   onOpenCard?: (id: string) => void;
@@ -188,6 +190,14 @@ export function Subtasks({
                 </span>
               ))}
 
+              {canEdit && (
+                <SubtaskTagsPicker
+                  subtask={child}
+                  boardTags={board?.labels ?? []}
+                  onChanged={onChanged}
+                />
+              )}
+
               {priority && priority.value !== 'NONE' && (
                 <span
                   className="h-2 w-2 shrink-0 rounded-full"
@@ -270,6 +280,67 @@ export function Subtasks({
           </button>
         ))}
     </section>
+  );
+}
+
+function SubtaskTagsPicker({
+  subtask,
+  boardTags,
+  onChanged,
+}: {
+  subtask: Summary;
+  boardTags: any[];
+  onChanged: () => void;
+}) {
+  const { toast } = useApp();
+  const applied = new Set((subtask.labels ?? []).map((relation) => relation.label.id));
+
+  return (
+    <Popover
+      align="right"
+      width="w-60"
+      trigger={({ toggle }) => (
+        <button
+          className="btn btn-ghost btn-icon shrink-0 text-muted"
+          onClick={toggle}
+          aria-label={`Tags for ${subtask.title}`}
+          title="Subtask tags"
+        >
+          <Tag size={13} />
+        </button>
+      )}
+    >
+      <p className="px-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted">
+        Subtask tags
+      </p>
+      <div className="max-h-64 space-y-1 overflow-y-auto">
+        {boardTags.map((tag: any) => (
+          <button
+            key={tag.id}
+            onClick={async () => {
+              try {
+                await post(`/api/cards/${subtask.id}/tags/${tag.id}`);
+                onChanged();
+              } catch (err: any) {
+                toast({ title: err.message || 'Could not update subtask tags', tone: 'error' });
+              }
+            }}
+            className="flex w-full items-center gap-2 rounded-sm px-1.5 py-1.5 transition-colors hover:bg-surface3/60"
+          >
+            <span
+              className="h-6 min-w-0 flex-1 truncate rounded-sm px-2 text-left text-xs font-semibold leading-6"
+              style={{ background: `${tag.color}2e`, color: tag.color }}
+            >
+              {tag.name || 'Unnamed'}
+            </span>
+            {applied.has(tag.id) && <Check size={14} className="shrink-0 text-primary" />}
+          </button>
+        ))}
+        {boardTags.length === 0 && (
+          <p className="px-2 py-3 text-center text-xs text-muted">No tags yet.</p>
+        )}
+      </div>
+    </Popover>
   );
 }
 

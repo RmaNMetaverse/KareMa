@@ -238,6 +238,14 @@ html[data-motion='off'] .app-aurora span {
     --glass-blur: 30px;
   }
 
+  /* Menus that sit over dense glass content need a fully readable themed surface. */
+  html[data-glass='on'] .glass.popover-opaque {
+    background: hsl(var(--surface));
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    border-color: hsl(var(--border));
+  }
+
   .glass-hover {
     transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease,
       background-color 0.18s ease;
