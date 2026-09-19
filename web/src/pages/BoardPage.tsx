@@ -641,7 +641,7 @@ export function BoardPage() {
 
         <div className="relative z-10 ml-1 flex items-center -space-x-2">
           {board.members.slice(0, 5).map((m) => (
-            <Avatar key={m.userId} user={m.user} size={26} ring />
+            <Avatar key={m.userId} user={m.user} size={26} ring profilePreview={false} />
           ))}
           {board.members.length > 5 && (
             <span className="grid h-[26px] w-[26px] place-items-center rounded-full bg-surface3 text-[10px] font-semibold ring-2 ring-surface">

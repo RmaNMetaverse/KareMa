@@ -12,6 +12,7 @@ export function Avatar({
   size = 28,
   ring = false,
   title,
+  profilePreview = true,
 }: {
   user?: {
     name: string;
@@ -25,6 +26,7 @@ export function Avatar({
   size?: number;
   ring?: boolean;
   title?: string;
+  profilePreview?: boolean;
 }) {
   if (!user) return null;
   const style: React.CSSProperties = {
@@ -49,7 +51,7 @@ export function Avatar({
           initials(user.name)
         )}
       </span>
-      <span className="pointer-events-none absolute left-1/2 top-full z-[80] mt-2 w-64 -translate-x-1/2 translate-y-1 opacity-0 transition-all duration-150 group-hover/avatar:pointer-events-auto group-hover/avatar:translate-y-0 group-hover/avatar:opacity-100">
+      {profilePreview && <span className="pointer-events-none absolute left-1/2 top-full z-[80] mt-2 w-64 -translate-x-1/2 translate-y-1 opacity-0 transition-all duration-150 group-hover/avatar:pointer-events-auto group-hover/avatar:translate-y-0 group-hover/avatar:opacity-100">
         <span className="glass glass-sheen block rounded-xl border border-line/70 p-3 shadow-pop">
           <span className="flex items-center gap-3">
             <span
@@ -80,7 +82,7 @@ export function Avatar({
             <span className="mt-1 block text-[11px] text-muted">Role: {user.roleRef.name}</span>
           )}
         </span>
-      </span>
+      </span>}
     </span>
   );
 }
