@@ -266,7 +266,7 @@ function UsersTab() {
                 >
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <Avatar user={u} size={34} />
+                      <Avatar user={u} size={34} profilePreview={false} />
                       <div className="min-w-0">
                         <p className="flex items-center gap-2 truncate font-medium">
                           {u.name}

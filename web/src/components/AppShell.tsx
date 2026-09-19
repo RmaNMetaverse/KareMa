@@ -262,7 +262,7 @@ export function AppShell() {
                 width="w-60"
                 trigger={({ toggle }) => (
                   <button onClick={toggle} className="ml-1 rounded-full" aria-label="Account">
-                    <Avatar user={user} size={32} ring />
+                    <Avatar user={user} size={32} ring profilePreview={false} />
                   </button>
                 )}
               >
