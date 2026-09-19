@@ -11,8 +11,9 @@ import {
   MessageSquare,
   Paperclip,
 } from 'lucide-react';
-import { cn, dueState, formatDate, initials, PRIORITIES } from '../../lib/utils';
+import { cn, dueState, formatDate, PRIORITIES } from '../../lib/utils';
 import { withBase } from '../../lib/base';
+import { Avatar } from '../ui';
 
 export type CardData = {
   id: string;
@@ -289,22 +290,7 @@ export function CardTile({
           {card.assignees.length > 0 && (
             <div className="mt-2 flex items-center justify-end -space-x-1.5">
               {card.assignees.slice(0, 4).map(({ user }) => (
-                <span
-                  key={user.id}
-                  title={user.name}
-                  style={{ background: user.avatarColor }}
-                  className="grid h-6 w-6 place-items-center rounded-full text-[10px] font-semibold text-white ring-2 ring-surface"
-                >
-                  {user.avatarUrl ? (
-                    <img
-                      src={withBase(user.avatarUrl)}
-                      className="h-full w-full rounded-full object-cover"
-                      alt=""
-                    />
-                  ) : (
-                    initials(user.name)
-                  )}
-                </span>
+                <Avatar key={user.id} user={user} size={24} ring />
               ))}
               {card.assignees.length > 4 && (
                 <span className="grid h-6 w-6 place-items-center rounded-full bg-surface3 text-[10px] font-semibold ring-2 ring-surface">

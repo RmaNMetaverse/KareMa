@@ -13,7 +13,15 @@ export function Avatar({
   ring = false,
   title,
 }: {
-  user?: { name: string; avatarColor?: string; avatarUrl?: string | null } | null;
+  user?: {
+    name: string;
+    email?: string;
+    title?: string | null;
+    role?: string | null;
+    roleRef?: { name?: string | null } | null;
+    avatarColor?: string;
+    avatarUrl?: string | null;
+  } | null;
   size?: number;
   ring?: boolean;
   title?: string;
@@ -26,19 +34,53 @@ export function Avatar({
     background: user.avatarUrl ? undefined : user.avatarColor || '#6366f1',
   };
   return (
-    <span
-      title={title ?? user.name}
-      style={style}
-      className={cn(
-        'inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white overflow-hidden select-none',
-        ring && 'ring-2 ring-surface'
-      )}
-    >
-      {user.avatarUrl ? (
-        <img src={withBase(user.avatarUrl)} alt={user.name} className="h-full w-full object-cover" />
-      ) : (
-        initials(user.name)
-      )}
+    <span className="group/avatar relative inline-flex shrink-0">
+      <span
+        title={title ?? user.name}
+        style={style}
+        className={cn(
+          'inline-flex items-center justify-center rounded-full font-semibold text-white overflow-hidden select-none',
+          ring && 'ring-2 ring-surface'
+        )}
+      >
+        {user.avatarUrl ? (
+          <img src={withBase(user.avatarUrl)} alt={user.name} className="h-full w-full object-cover" />
+        ) : (
+          initials(user.name)
+        )}
+      </span>
+      <span className="pointer-events-none absolute left-1/2 top-full z-[80] mt-2 w-64 -translate-x-1/2 translate-y-1 opacity-0 transition-all duration-150 group-hover/avatar:pointer-events-auto group-hover/avatar:translate-y-0 group-hover/avatar:opacity-100">
+        <span className="glass glass-sheen block rounded-xl border border-line/70 p-3 shadow-pop">
+          <span className="flex items-center gap-3">
+            <span
+              style={{
+                width: 64,
+                height: 64,
+                background: user.avatarUrl ? undefined : user.avatarColor || '#6366f1',
+              }}
+              className="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full text-xl font-semibold text-white ring-2 ring-primary/30"
+            >
+              {user.avatarUrl ? (
+                <img src={withBase(user.avatarUrl)} alt={user.name} className="h-full w-full object-cover" />
+              ) : (
+                initials(user.name)
+              )}
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-semibold text-ink">{user.name}</span>
+              {(user.title || user.roleRef?.name || user.role) && (
+                <span className="mt-0.5 block truncate text-xs text-muted">
+                  {user.title || user.roleRef?.name || user.role}
+                </span>
+              )}
+            </span>
+          </span>
+          {user.email && <span className="mt-2 block truncate text-xs text-muted">{user.email}</span>}
+          {user.roleRef?.name && user.title && (
+            <span className="mt-1 block text-[11px] text-muted">Role: {user.roleRef.name}</span>
+          )}
+        </span>
+      </span>
     </span>
   );
 }
