@@ -2,6 +2,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
   AlignLeft,
+  CheckCircle2,
   CheckSquare,
   ChevronDown,
   ChevronRight,
@@ -10,10 +11,14 @@ import {
   GitBranch,
   MessageSquare,
   Paperclip,
+  XCircle,
 } from 'lucide-react';
+import { useState } from 'react';
+import { post } from '../../lib/api';
+import { useApp } from '../../store/app';
 import { cn, dueState, formatDate, PRIORITIES } from '../../lib/utils';
 import { withBase } from '../../lib/base';
-import { Avatar } from '../ui';
+import { Avatar, Spinner } from '../ui';
 
 export type CardData = {
   id: string;
@@ -56,6 +61,7 @@ export function CardTile({
   foldable = 0,
   folded = false,
   onToggleSubtasks,
+  onReviewed,
 }: {
   card: CardData;
   onOpen: () => void;
@@ -66,7 +72,10 @@ export function CardTile({
   foldable?: number;
   folded?: boolean;
   onToggleSubtasks?: () => void;
+  onReviewed?: () => void;
 }) {
+  const { user, toast } = useApp();
+  const [reviewing, setReviewing] = useState<'approve' | 'reject' | null>(null);
   const sortable = useSortable({ id: card.id, data: { type: 'card', card }, disabled });
   const {
     attributes,
@@ -92,6 +101,26 @@ export function CardTile({
   const priority = PRIORITIES.find((p) => p.value === card.priority);
   const hasCover = card.coverType && card.coverValue;
   const fullCover = hasCover && card.coverSize === 'full' && card.coverType === 'image';
+  const canReview = user?.roleRef?.key === 'supervisor' && card.reviewStatus === 'IN_REVIEW';
+
+  const review = async (decision: 'approve' | 'reject', event: React.MouseEvent) => {
+    event.stopPropagation();
+    event.preventDefault();
+    setReviewing(decision);
+    try {
+      await post(`/api/cards/${card.id}/review`, { decision });
+      toast({
+        title: decision === 'approve' ? 'Work approved' : 'Work returned for changes',
+        description: card.title,
+        tone: decision === 'approve' ? 'success' : 'info',
+      });
+      onReviewed?.();
+    } catch (err: any) {
+      toast({ title: err.message || 'Could not save the review', tone: 'error' });
+    } finally {
+      setReviewing(null);
+    }
+  };
 
   return (
     <div
@@ -131,7 +160,7 @@ export function CardTile({
 
       {fullCover && (
         <div
-          className="relative flex min-h-[6.5rem] items-end p-2.5"
+          className="relative flex min-h-[6.5rem] flex-col items-stretch justify-end p-2.5"
           style={{
             backgroundImage: `linear-gradient(to top, rgba(0,0,0,.75), rgba(0,0,0,.15)), url(${withBase(
               card.coverValue
@@ -143,6 +172,32 @@ export function CardTile({
           <span className="text-sm font-semibold leading-snug text-white drop-shadow">
             {card.title}
           </span>
+          {canReview && (
+            <div
+              className="mt-2 flex gap-1.5 border-t border-white/20 pt-2"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <button
+                type="button"
+                className="btn min-w-0 flex-1 border border-white/25 bg-black/35 py-1 text-[11px] text-white backdrop-blur-sm"
+                disabled={reviewing !== null}
+                onClick={(event) => review('reject', event)}
+              >
+                {reviewing === 'reject' ? <Spinner size={12} /> : <XCircle size={12} />}
+                Return
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary min-w-0 flex-1 py-1 text-[11px]"
+                disabled={reviewing !== null}
+                onClick={(event) => review('approve', event)}
+              >
+                {reviewing === 'approve' ? <Spinner size={12} /> : <CheckCircle2 size={12} />}
+                Approve
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -297,6 +352,33 @@ export function CardTile({
                   +{card.assignees.length - 4}
                 </span>
               )}
+            </div>
+          )}
+
+          {canReview && (
+            <div
+              className="mt-2.5 flex gap-1.5 border-t border-line/60 pt-2.5"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <button
+                type="button"
+                className="btn btn-subtle min-w-0 flex-1 py-1 text-[11px] text-danger"
+                disabled={reviewing !== null}
+                onClick={(event) => review('reject', event)}
+              >
+                {reviewing === 'reject' ? <Spinner size={12} /> : <XCircle size={12} />}
+                Return
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary min-w-0 flex-1 py-1 text-[11px]"
+                disabled={reviewing !== null}
+                onClick={(event) => review('approve', event)}
+              >
+                {reviewing === 'approve' ? <Spinner size={12} /> : <CheckCircle2 size={12} />}
+                Approve
+              </button>
             </div>
           )}
         </div>

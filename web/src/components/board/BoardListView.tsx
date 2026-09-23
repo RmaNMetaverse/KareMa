@@ -2,16 +2,18 @@ import { useMemo, useState } from 'react';
 import {
   ArrowDown,
   ArrowUp,
+  CheckCircle2,
   ChevronRight,
   CornerDownRight,
   MessageSquare,
   Paperclip,
   Plus,
+  XCircle,
 } from 'lucide-react';
 import { patch, post } from '../../lib/api';
 import { useApp } from '../../store/app';
 import { cn, dueState, formatDate, PRIORITIES } from '../../lib/utils';
-import { Avatar, MenuItem, Popover } from '../ui';
+import { Avatar, MenuItem, Popover, Spinner } from '../ui';
 import { CardData } from './CardTile';
 import { ListData } from './ListColumn';
 
@@ -56,7 +58,8 @@ export function BoardListView({
   onOpenCard: (id: string) => void;
   onChanged: () => void;
 }) {
-  const { toast } = useApp();
+  const { user, toast } = useApp();
+  const [reviewing, setReviewing] = useState<string | null>(null);
   const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({
     key: 'number',
     dir: 'asc',
@@ -170,6 +173,23 @@ export function BoardListView({
     }
   };
 
+  const reviewCard = async (card: CardData, decision: 'approve' | 'reject') => {
+    setReviewing(card.id);
+    try {
+      await post(`/api/cards/${card.id}/review`, { decision });
+      toast({
+        title: decision === 'approve' ? 'Work approved' : 'Work returned for changes',
+        description: card.title,
+        tone: decision === 'approve' ? 'success' : 'info',
+      });
+      onChanged();
+    } catch (err: any) {
+      toast({ title: err.message || 'Could not save the review', tone: 'error' });
+    } finally {
+      setReviewing(null);
+    }
+  };
+
   if (rows.length === 0) {
     return (
       <div className="glass mx-auto mt-6 max-w-md rounded-xl px-6 py-14 text-center">
@@ -204,7 +224,7 @@ export function BoardListView({
                   </th>
                 ))}
                 <th className="w-24 px-3 py-2.5 font-semibold">Tags</th>
-                <th className="w-16 px-3 py-2.5" />
+                <th className="w-44 px-3 py-2.5" />
               </tr>
             </thead>
 
@@ -450,10 +470,31 @@ export function BoardListView({
                       </span>
                     </td>
 
-                    <td className="px-3 py-2 text-right">
-                      <span className="text-[11px] text-muted opacity-0 transition-opacity group-hover:opacity-100">
-                        Open
-                      </span>
+                    <td className="px-3 py-2 text-right" onClick={(event) => event.stopPropagation()}>
+                      {user?.roleRef?.key === 'supervisor' && card.reviewStatus === 'IN_REVIEW' ? (
+                        <span className="flex justify-end gap-1">
+                          <button
+                            className="btn btn-subtle py-1 text-[11px] text-danger"
+                            disabled={reviewing === card.id}
+                            onClick={() => reviewCard(card, 'reject')}
+                          >
+                            {reviewing === card.id ? <Spinner size={11} /> : <XCircle size={11} />}
+                            Return
+                          </button>
+                          <button
+                            className="btn btn-primary py-1 text-[11px]"
+                            disabled={reviewing === card.id}
+                            onClick={() => reviewCard(card, 'approve')}
+                          >
+                            {reviewing === card.id ? <Spinner size={11} /> : <CheckCircle2 size={11} />}
+                            Approve
+                          </button>
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-muted opacity-0 transition-opacity group-hover:opacity-100">
+                          Open
+                        </span>
+                      )}
                     </td>
                   </tr>
                 );

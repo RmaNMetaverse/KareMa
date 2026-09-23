@@ -42,6 +42,7 @@ export function ListColumn({
   foldedCards,
   onToggleSubtasks,
   onFoldAll,
+  onReviewed,
 }: {
   list: ListData;
   canEdit: boolean;
@@ -59,6 +60,7 @@ export function ListColumn({
   foldedCards?: Set<string>;
   onToggleSubtasks?: (cardId: string) => void;
   onFoldAll?: (cardIds: string[], fold: boolean) => void;
+  onReviewed?: () => void;
 }) {
   // every card in this list that has sub-tasks sitting beside it
   const foldableParents = Object.keys(childCounts ?? {});
@@ -311,6 +313,7 @@ export function ListColumn({
                 foldable={childCounts?.[card.id] ?? 0}
                 folded={foldedCards?.has(card.id) ?? false}
                 onToggleSubtasks={onToggleSubtasks ? () => onToggleSubtasks(card.id) : undefined}
+                onReviewed={onReviewed}
               />
             ))}
           </SortableContext>

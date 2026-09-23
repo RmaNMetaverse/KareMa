@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Archive, CheckCircle2, Clock3, Layers, Plus, SquareKanban, Star, Users } from 'lucide-react';
+import { Archive, CheckCircle2, Clock3, Layers, Plus, SquareKanban, Star, Users, XCircle } from 'lucide-react';
 import { get, post } from '../lib/api';
 import { useApp } from '../store/app';
 import { cn, timeAgo } from '../lib/utils';
@@ -130,7 +130,7 @@ export function Dashboard() {
               </h2>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {starred.map((b) => (
-                  <BoardCard key={b.id} board={b} onToggleStar={toggleStar} />
+                  <BoardCard key={b.id} board={b} onToggleStar={toggleStar} onReviewed={load} />
                 ))}
               </div>
             </section>
@@ -144,7 +144,7 @@ export function Dashboard() {
             )}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {rest.map((b) => (
-                <BoardCard key={b.id} board={b} onToggleStar={toggleStar} />
+                <BoardCard key={b.id} board={b} onToggleStar={toggleStar} onReviewed={load} />
               ))}
               {!showArchived && canCreate && (
                 <button
@@ -177,10 +177,35 @@ export function Dashboard() {
 function BoardCard({
   board,
   onToggleStar,
+  onReviewed,
 }: {
   board: Board;
   onToggleStar: (b: Board, e: React.MouseEvent) => void;
+  onReviewed: () => void;
 }) {
+  const { user, toast } = useApp();
+  const [reviewing, setReviewing] = useState<'approve' | 'reject' | null>(null);
+  const canReview = user?.roleRef?.key === 'supervisor' && board.reviewStatus === 'IN_REVIEW';
+
+  const review = async (decision: 'approve' | 'reject', event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setReviewing(decision);
+    try {
+      await post(`/api/boards/${board.id}/review`, { decision });
+      toast({
+        title: decision === 'approve' ? 'Board approved' : 'Board returned for changes',
+        description: board.title,
+        tone: decision === 'approve' ? 'success' : 'info',
+      });
+      onReviewed();
+    } catch (err: any) {
+      toast({ title: err.message || 'Could not save the board review', tone: 'error' });
+    } finally {
+      setReviewing(null);
+    }
+  };
+
   return (
     <Link
       to={`/b/${board.id}`}
@@ -244,6 +269,29 @@ function BoardCard({
           </div>
           <AvatarStack users={board.members.map((m) => m.user)} max={4} size={22} />
         </div>
+
+        {canReview && (
+          <div className="mt-3 flex gap-2 border-t border-line/60 pt-3">
+            <button
+              type="button"
+              className="btn btn-subtle min-w-0 flex-1 py-1.5 text-xs text-danger"
+              disabled={reviewing !== null}
+              onClick={(event) => review('reject', event)}
+            >
+              {reviewing === 'reject' ? <Spinner size={13} /> : <XCircle size={13} />}
+              Return
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary min-w-0 flex-1 py-1.5 text-xs"
+              disabled={reviewing !== null}
+              onClick={(event) => review('approve', event)}
+            >
+              {reviewing === 'approve' ? <Spinner size={13} /> : <CheckCircle2 size={13} />}
+              Approve
+            </button>
+          </div>
+        )}
       </div>
     </Link>
   );

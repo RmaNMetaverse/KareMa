@@ -795,6 +795,7 @@ export function BoardPage() {
                     foldedCards={foldedCards}
                     onToggleSubtasks={toggleSubtasks}
                     onFoldAll={foldMany}
+                    onReviewed={load}
                     onOpenCard={openCard}
                     onAddCard={addCard}
                     onRename={(id, title) => updateList(id, { title })}
