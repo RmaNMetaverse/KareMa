@@ -37,16 +37,15 @@ async function completionBlockers(cardId: string) {
   return { uncheckedItems, unfinishedSubtasks };
 }
 
-const COMPLETION_LIST_NAMES = new Set(['done', 'finished', 'end']);
-
-/** The first completion list in the board's own list order. */
-async function completionList(boardId: string) {
+/** The list immediately to the right of the card's current list. */
+async function nextList(boardId: string, currentListId: string) {
   const lists = await prisma.list.findMany({
     where: { boardId, isArchived: false },
     orderBy: { position: 'asc' },
-    select: { id: true, title: true },
+    select: { id: true },
   });
-  return lists.find((list) => COMPLETION_LIST_NAMES.has(list.title.trim().toLowerCase())) ?? null;
+  const currentIndex = lists.findIndex((list) => list.id === currentListId);
+  return currentIndex >= 0 ? lists[currentIndex + 1] ?? null : null;
 }
 
 /** Cards assigned to me, across every board I can see. */
@@ -314,7 +313,8 @@ cardsRouter.post('/:id/review', async (req, res) => {
     }
   }
 
-  const destination = decision.data === 'approve' ? await completionList(card.boardId) : null;
+  const destination =
+    decision.data === 'approve' ? await nextList(card.boardId, card.listId) : null;
   const shouldMove = !!destination && destination.id !== card.listId;
   const destinationPosition = shouldMove
     ? await cardPosition(
