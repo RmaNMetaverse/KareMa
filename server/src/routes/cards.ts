@@ -37,6 +37,18 @@ async function completionBlockers(cardId: string) {
   return { uncheckedItems, unfinishedSubtasks };
 }
 
+const COMPLETION_LIST_NAMES = new Set(['done', 'finished', 'end']);
+
+/** The first completion list in the board's own list order. */
+async function completionList(boardId: string) {
+  const lists = await prisma.list.findMany({
+    where: { boardId, isArchived: false },
+    orderBy: { position: 'asc' },
+    select: { id: true, title: true },
+  });
+  return lists.find((list) => COMPLETION_LIST_NAMES.has(list.title.trim().toLowerCase())) ?? null;
+}
+
 /** Cards assigned to me, across every board I can see. */
 cardsRouter.get('/mine', async (req, res) => {
   const cards = await prisma.card.findMany({
@@ -302,6 +314,16 @@ cardsRouter.post('/:id/review', async (req, res) => {
     }
   }
 
+  const destination = decision.data === 'approve' ? await completionList(card.boardId) : null;
+  const shouldMove = !!destination && destination.id !== card.listId;
+  const destinationPosition = shouldMove
+    ? await cardPosition(
+        destination.id,
+        await prisma.card.count({ where: { listId: destination.id, isArchived: false } }),
+        card.id
+      )
+    : card.position;
+
   await prisma.card.update({
     where: { id: card.id },
     data: {
@@ -309,6 +331,7 @@ cardsRouter.post('/:id/review', async (req, res) => {
       reviewStatus: decision.data === 'approve' ? 'APPROVED' : 'OPEN',
       reviewedAt: new Date(),
       reviewedById: req.user!.id,
+      ...(shouldMove ? { listId: destination.id, position: destinationPosition } : {}),
     },
   });
 
